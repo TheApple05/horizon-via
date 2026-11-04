@@ -5,6 +5,7 @@
 
 pub mod blocks;
 pub mod catalog;
+pub mod chunks;
 pub mod limits;
 pub mod storage;
 pub mod translation;

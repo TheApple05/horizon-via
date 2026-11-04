@@ -49,6 +49,16 @@ and block-entity tails remain outside this decoder. Application receive limits
 also cap expanded collections at 4096 elements and individual byte fields at 8 MiB;
 larger server data requires a reviewed per-field budget.
 
+`chunks` checks a cache-disabled LevelChunk against the active dimension and its
+negotiated section bounds, decodes explicit version-9 section Y values into
+sparse slots, and reads biomes for the full dimension height. Duplicate sections,
+cache metadata, request-mode metadata, oversized payloads and wrong dimensions
+are refused. Untransmitted sections remain unknown rather than becoming air.
+The biome-update flag and exact border/block-entity tail are retained; the tail
+is not validated or applied. This is a packet envelope, not a complete world or
+permission to acknowledge presentation. Session ownership, tails, omissions and
+registry epochs still require host handling before world insertion.
+
 Storage format adapted from the MIT implementations at
 [Dragonfly 51dd9c1](https://github.com/df-mc/dragonfly/tree/51dd9c1d615f17b70bbeef6ab2cbcee0545e66c0/server/world/chunk)
 and [Gophertunnel 0e179fc](https://github.com/Sandertv/gophertunnel/blob/0e179fc4bb082c13e946c7d81ab1cf9f623d942c/minecraft/protocol/varint.go).
@@ -57,6 +67,8 @@ retained. The developer-only `check_storage_oracle.py` authenticates selected
 existing reference sources, runs their original palette/packing/varint methods
 offline with synthetic IDs, and compares all 36,864 cells across nine widths
 against the Rust decoder. It imports no world registry or game assets.
+The LevelChunk envelope follows the same Dragonfly network decoder and the
+pinned MIT [Gophertunnel packet](https://github.com/Sandertv/gophertunnel/blob/0e179fc4bb082c13e946c7d81ab1cf9f623d942c/minecraft/protocol/packet/level_chunk.go).
 
 `translation` converts decoded native Y-fast cells into the host's X-fast order.
 Its explicit palette mode resolves unsigned wire identities before a host-owned
