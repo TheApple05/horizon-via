@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "id": "horizon_via",
+  "version": "0.1.0",
+  "game": "26.3",
+  "horizon": "757ce1bd14f28647e503030d28744a8034b1f3b0",
+  "mixins": "e8cd0aa38cffef49cb2e088ef716baa107148c02"
+}
