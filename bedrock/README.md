@@ -46,7 +46,16 @@ Pinned Cinnabar-authored libraries have MIT grants. Their notices and the
 separate CC0 data dedication are retained in `notices/`. Imported protocol
 documents, schemas, captures and mixed game-data catalogs are not relicensed by
 those grants. The base Cinnabar application's PolyForm implementation is not
-used. All-platform transitive distribution-license review remains pending.
+used. The [transitive notice index](notices/transitive/manifest.json) covers all
+164 added third-party identities in the author-prepared combined Horizon lock,
+including their applicable complete license texts and attributions. Those
+package grants are permissive; mixed AND obligations retain their full notices.
+This is a package-level notice review, not a full per-file or binary-provenance
+audit. The index binds combined lock SHA-256
+`705f20b07c680348250d59a026e03a66b49d8ef6d9de565397af46680e04ba87`;
+it does not claim to describe every version in the separate development lock.
+No compiler, import-library binary, schema, capture or game asset is included
+in the legal-only notice bundle.
 
 CPU-only developer checks, using a separate target directory:
 
