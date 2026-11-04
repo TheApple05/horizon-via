@@ -1,4 +1,5 @@
 # These inputs are authenticated as raw bytes, including on Windows checkouts.
 mixins/horizon_via/source_patch/data/** -text
 bedrock/data/native-facts.json -text
-bedrock/host/streaming-unlit.patch -text
+# A unified diff's empty context lines intentionally contain one space.
+bedrock/host/streaming-unlit.patch -text whitespace=-blank-at-eol

@@ -1,0 +1,464 @@
+diff --git a/crates/horizon-client-render/src/streaming.rs b/crates/horizon-client-render/src/streaming.rs
+index 1d492e5b05fab1ea91ad80cf97bcb1f4a7be395f..35ec00c5bb7c6f2aa9927c62f341f0ed258558fb 100644
+--- a/crates/horizon-client-render/src/streaming.rs
++++ b/crates/horizon-client-render/src/streaming.rs
+@@ -985,6 +985,12 @@ pub struct WorkerContext {
+     pub biomes: Arc<crate::biome::Biomes>,
+     pub light: Arc<LightTables>,
+ }
++/// A remote column that cannot safely enter the local lighting pipeline.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub enum RemoteUnlitError {
++    LayoutMismatch,
++    CoordinateOverflow,
++}
+ impl Streaming {
+     pub fn new<G: ChunkGenerator>(
+         generator: Arc<G>,
+@@ -1125,6 +1131,74 @@ impl Streaming {
+             }
+         }
+     }
++    /// A server column without usable light: discard its light and wait for
++    /// local lighting over its complete 3x3 region before admitting new meshes.
++    /// Resident neighbours keep their previous light while their relights run.
++    /// Reject incompatible layouts or coordinates before changing any state.
++    pub fn insert_remote_unlit(
++        &mut self,
++        world: &mut World,
++        mut chunk: Chunk,
++    ) -> Result<(), RemoteUnlitError> {
++        if chunk.layout() != world.layout() {
++            return Err(RemoteUnlitError::LayoutMismatch);
++        }
++        let (x, z) = (chunk.x, chunk.z);
++        let bounds = |v: i32| -> Result<(i32, i32), RemoteUnlitError> {
++            // Radius-two meshes read a third ring and blend biome samples up
++            // to seven blocks past their own column. Keep that entire outer
++            // footprint representable as host block coordinates, not just
++            // the chunk keys used to invalidate work below.
++            v.checked_sub(3)
++                .and_then(|c| c.checked_mul(16))
++                .zip(
++                    v.checked_add(3)
++                        .and_then(|c| c.checked_mul(16))
++                        .and_then(|origin| origin.checked_add(15)),
++                )
++                .ok_or(RemoteUnlitError::CoordinateOverflow)?;
++            Ok((v - 2, v + 2))
++        };
++        let (x0, x1) = bounds(x)?;
++        let (z0, z1) = bounds(z)?;
++        // Section defaults contain full skylight. Neither those defaults nor a
++        // packet's supplied values are evidence of local lighting completion.
++        chunk.lit = false;
++        chunk.light_loaded = false;
++        for section in &mut chunk.sections {
++            Arc::make_mut(section).light = crate::chunk::Light::Uniform(0);
++        }
++        world.chunks.insert((x, z), Arc::new(chunk));
++        world.revision = world.revision.wrapping_add(1);
++        self.lit.remove(&(x, z));
++        self.meshed.remove(&(x, z));
++        self.generated_total += 1;
++        // Every light job whose immutable 3x3 snapshot included this column is
++        // obsolete, including jobs still waiting in the done mailbox. Removing
++        // their sequence tokens makes update reject them even after replacement.
++        for nz in z - 1..=z + 1 {
++            for nx in x - 1..=x + 1 {
++                self.lighting.remove(&(nx, nz));
++                self.light_snapshots.remove(&(nx, nz));
++                world.dirty_light.insert((nx, nz));
++            }
++        }
++        // Those relights can change light sampled by their own neighbours.
++        // Invalidate old mesh/compile tokens throughout that second ring, but
++        // retain resident columns and uploaded presentation until rebuilt.
++        for nz in z0..=z1 {
++            for nx in x0..=x1 {
++                for sy in 0..world.layout().sections() as i32 {
++                    let section = (nx, sy, nz);
++                    self.meshing.remove(&section);
++                    self.compile_started.remove(&section);
++                    self.waiting.remove(&section);
++                    world.dirty_sections.insert(section);
++                }
++            }
++        }
++        Ok(())
++    }
+     /// A resident column a server sent again whole (it changed it in bulk):
+     /// its new blocks taken, the sections that did not change kept as they
+     /// were, and its light and its neighbours' worked out again here, off
+@@ -3079,6 +3153,371 @@ fn forget_pending_sections(
+ mod tests {
+     use super::*;
+ 
++    mod remote_unlit {
++        use super::*;
++        use crate::{
++            assets::{Assets, Properties, RenderAssets},
++            biome::Biomes,
++            chunk::{ColumnLayout, Light},
++        };
++        use horizon_world::registry::{BlockRegistry, BlockStateId};
++        use std::{
++            path::PathBuf,
++            sync::{
++                OnceLock,
++                atomic::{AtomicUsize, Ordering},
++            },
++            time::{Duration, Instant},
++        };
++
++        struct RemoteOnly(Arc<AtomicUsize>);
++        impl RemoteOnly {
++            fn unexpected(&self) -> ! {
++                self.0.fetch_add(1, Ordering::SeqCst);
++                panic!("remote lighting requested local terrain generation or saving");
++            }
++        }
++        impl ChunkGenerator for RemoteOnly {
++            type Worker = ();
++            fn worker(&self) {}
++            fn proto(&self, _: &mut (), _: i32, _: i32) -> Proto {
++                self.unexpected()
++            }
++            fn finish(&self, _: Proto) -> Chunk {
++                self.unexpected()
++            }
++            fn light_view(&self, _: &Proto) -> Option<Chunk> {
++                self.unexpected()
++            }
++            fn save_protos(&self, _: &[&Proto]) {
++                self.unexpected()
++            }
++            fn save_finished(&self, _: Chunk) {
++                self.unexpected()
++            }
++        }
++
++        /// Real constructor and pool registration, with synthetic all-air CPU
++        /// resources only. No meshing, player files or prepared game assets.
++        struct Fixture {
++            stream: Option<Streaming>,
++            unexpected: Arc<AtomicUsize>,
++            root: PathBuf,
++            temp_parent: PathBuf,
++            basename: String,
++        }
++        impl Fixture {
++            fn new() -> Self {
++                static NEXT: AtomicUsize = AtomicUsize::new(0);
++                static REGISTRY: OnceLock<&'static BlockRegistry> = OnceLock::new();
++                let temp_parent = std::env::temp_dir().canonicalize().unwrap();
++                let basename = format!(
++                    "horizon-remote-unlit-{}-{}",
++                    std::process::id(),
++                    NEXT.fetch_add(1, Ordering::Relaxed)
++                );
++                let root = temp_parent.join(&basename);
++                std::fs::create_dir(&root).unwrap();
++                let unexpected = Arc::new(AtomicUsize::new(0));
++                let mut fixture = Self {
++                    stream: None,
++                    unexpected: unexpected.clone(),
++                    root,
++                    temp_parent,
++                    basename,
++                };
++                let maps = fixture.root.join("assets/minecraft/textures/colormap");
++                std::fs::create_dir_all(&maps).unwrap();
++                std::fs::create_dir_all(fixture.root.join("data/minecraft/worldgen/biome"))
++                    .unwrap();
++                let mut pixel = Vec::new();
++                {
++                    let mut encoder = png::Encoder::new(&mut pixel, 1, 1);
++                    encoder.set_color(png::ColorType::Rgb);
++                    encoder.set_depth(png::BitDepth::Eight);
++                    let mut writer = encoder.write_header().unwrap();
++                    writer.write_image_data(&[0, 0, 0]).unwrap();
++                    writer.finish().unwrap();
++                }
++                for name in ["grass", "foliage", "dry_foliage"] {
++                    std::fs::write(maps.join(format!("{name}.png")), &pixel).unwrap();
++                }
++                let registry: &'static BlockRegistry = REGISTRY.get_or_init(|| {
++                    Box::leak(Box::new(
++                        BlockRegistry::from_facts_json(
++                            &br#"{"states":[["air",true,false,"","minecraft:air"]],"defaults":{"minecraft:air":0}}"#[..],
++                        )
++                        .unwrap(),
++                    ))
++                });
++                let assets = Arc::new(Assets {
++                    registry,
++                    properties: Properties::for_tests(&[(true, false, false, false)]),
++                    material_states: [BlockStateId(0); 6],
++                    blocks_fluid_flow: Default::default(),
++                });
++                let render = Arc::new(RenderAssets {
++                    sprite_size: 1,
++                    sprite_minimum_size: 1,
++                    pixels: vec![0; 4],
++                    texture_layers: 1,
++                    model_catalog: Default::default(),
++                    model_library: Err("CPU lighting fixture has no model library".into()),
++                    model_placements: Vec::new(),
++                    model_gallery: Vec::new(),
++                    animations: Vec::new(),
++                    sprite_layers: [
++                        "water_still",
++                        "water_flow",
++                        "water_overlay",
++                        "lava_still",
++                        "lava_flow",
++                    ]
++                    .map(|name| (format!("minecraft:block/{name}"), 0))
++                    .into(),
++                    emissive: Vec::new(),
++                    translucent_layers: Vec::new(),
++                    sprite_mips: Vec::new(),
++                    pbr_normals: Vec::new(),
++                    pbr_specular: Vec::new(),
++                    pbr_size: 0,
++                    connected: Default::default(),
++                    fusion: Default::default(),
++                    generation: 0,
++                });
++                // Every column is air: light_chunk never indexes a non-air
++                // state, and geometry stays disabled throughout these tests.
++                let facts = crate::blocks::BlockFacts {
++                    states: Vec::new(),
++                    air: BlockStateId(0),
++                    woods: Default::default(),
++                };
++                let context = Arc::new(WorkerContext {
++                    tables: Arc::new(
++                        MeshTables::new(&assets, &render, &facts, FaceVisibility::empty()).unwrap(),
++                    ),
++                    light: Arc::new(LightTables::new(&facts)),
++                    biomes: Arc::new(Biomes::load(&fixture.root).unwrap()),
++                    assets,
++                    render,
++                });
++                let mut stream = Streaming::new(Arc::new(RemoteOnly(unexpected)), context, 1);
++                stream.remote = true;
++                stream.mesh = false;
++                fixture.stream = Some(stream);
++                fixture
++            }
++            fn cleanup(&self) -> std::io::Result<()> {
++                let metadata = match std::fs::symlink_metadata(&self.root) {
++                    Ok(metadata) => metadata,
++                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
++                    Err(e) => return Err(e),
++                };
++                let refused = || std::io::Error::other("unsafe CPU fixture cleanup target");
++                if !metadata.is_dir() || metadata.file_type().is_symlink() {
++                    return Err(refused());
++                }
++                #[cfg(windows)]
++                {
++                    use std::os::windows::fs::MetadataExt;
++                    if metadata.file_attributes() & 0x400 != 0 {
++                        return Err(refused());
++                    }
++                }
++                let canonical = self.root.canonicalize()?;
++                if canonical.parent() != Some(self.temp_parent.as_path())
++                    || canonical.file_name().and_then(|n| n.to_str())
++                        != Some(self.basename.as_str())
++                    || self.root.file_name().and_then(|n| n.to_str())
++                        != Some(self.basename.as_str())
++                {
++                    return Err(refused());
++                }
++                std::fs::remove_dir_all(canonical)
++            }
++            fn close(mut self) {
++                // Streaming aborts queued work; Registration unregisters and
++                // waits for running jobs before we inspect the final counter.
++                // The global pool belongs to the test process, not this fixture.
++                drop(self.stream.take());
++                assert_eq!(self.unexpected.load(Ordering::SeqCst), 0);
++                self.cleanup().unwrap();
++                assert!(!self.root.exists());
++            }
++        }
++        impl Drop for Fixture {
++            fn drop(&mut self) {
++                drop(self.stream.take());
++                let _ = self.cleanup();
++            }
++        }
++
++        #[test]
++        fn insertion_clears_shared_light_and_invalidates_only_affected_work() {
++            let mut fixture = Fixture::new();
++            let stream = fixture.stream.as_mut().unwrap();
++            let mut world = World::new(BlockStateId(0), 0);
++            for z in -3i32..=3 {
++                for x in -3i32..=3 {
++                    let mut c = Chunk::empty(x, z);
++                    c.lit = true;
++                    c.light_loaded = true;
++                    world.chunks.insert((x, z), Arc::new(c));
++                    stream.lit.insert((x, z));
++                    stream.meshed.insert((x, z));
++                    stream.lighting.insert((x, z), 19);
++                    stream.light_snapshots.insert((x, z), 7);
++                    for sy in 0..world.layout().sections() as i32 {
++                        stream.meshing.insert((x, sy, z), 23);
++                        stream.compile_started.insert((x, sy, z), 11);
++                        stream.waiting.insert((x, sy, z));
++                    }
++                }
++            }
++            let old = world.chunks[&(0, 0)].clone();
++            let neighbour = world.chunks[&(1, 0)].clone();
++            let mut incoming = old.as_ref().clone();
++            Arc::make_mut(&mut incoming.sections[0]).light = Light::Full(Box::new([0xFF; 4096]));
++            let held = incoming.clone();
++            stream.insert_remote_unlit(&mut world, incoming).unwrap();
++            let now = &world.chunks[&(0, 0)];
++            assert!(!now.lit && !now.light_loaded);
++            assert!(
++                now.sections
++                    .iter()
++                    .all(|s| (0..4096).all(|i| s.light(i) == 0))
++            );
++            assert_eq!(held.sections[0].light(0), 0xFF);
++            assert_eq!(old.sections[0].light(0), 0xF0);
++            assert!(Arc::ptr_eq(&neighbour, &world.chunks[&(1, 0)]));
++            assert!(neighbour.lit && neighbour.light_loaded);
++            assert_eq!(world.revision, 1);
++            for z in -3i32..=3 {
++                for x in -3i32..=3 {
++                    let light = x.abs() <= 1 && z.abs() <= 1;
++                    let mesh = x.abs() <= 2 && z.abs() <= 2;
++                    assert_eq!(stream.lighting.contains_key(&(x, z)), !light);
++                    assert_eq!(stream.light_snapshots.contains_key(&(x, z)), !light);
++                    assert_eq!(world.dirty_light.contains(&(x, z)), light);
++                    assert_eq!(stream.is_lit(x, z), (x, z) != (0, 0));
++                    assert_eq!(stream.meshed.contains(&(x, z)), (x, z) != (0, 0));
++                    for sy in 0..world.layout().sections() as i32 {
++                        assert_eq!(stream.meshing.contains_key(&(x, sy, z)), !mesh);
++                        assert_eq!(stream.compile_start((x, sy, z)).is_some(), !mesh);
++                        assert_eq!(stream.waiting.contains(&(x, sy, z)), !mesh);
++                        assert_eq!(world.dirty_sections.contains(&(x, sy, z)), mesh);
++                    }
++                }
++            }
++            fixture.close();
++        }
++
++        #[test]
++        fn invalid_input_refuses_atomically_and_valid_block_margins_are_safe() {
++            let mut fixture = Fixture::new();
++            let stream = fixture.stream.as_mut().unwrap();
++            let mut world = World::new(BlockStateId(0), 0);
++            let old = Arc::new(Chunk::empty(0, 0));
++            world.chunks.insert((0, 0), old.clone());
++            world.revision = 23;
++            stream.lit.insert((0, 0));
++            stream.meshed.insert((0, 0));
++            stream.lighting.insert((0, 0), 1);
++            stream.light_snapshots.insert((0, 0), 1);
++            stream.meshing.insert((0, 0, 0), 2);
++            stream.compile_started.insert((0, 0, 0), 2);
++            for coordinate in [-134217726, 134217725, i32::MIN + 2, i32::MAX - 2] {
++                for (x, z) in [(coordinate, 0), (0, coordinate)] {
++                    assert_eq!(
++                        stream.insert_remote_unlit(&mut world, Chunk::empty(x, z)),
++                        Err(RemoteUnlitError::CoordinateOverflow)
++                    );
++                }
++            }
++            assert_eq!(
++                stream.insert_remote_unlit(
++                    &mut world,
++                    Chunk::with_layout(0, 0, ColumnLayout::new(0, 16).unwrap())
++                ),
++                Err(RemoteUnlitError::LayoutMismatch)
++            );
++            assert_eq!(world.revision, 23);
++            assert_eq!(world.chunks.len(), 1);
++            assert!(Arc::ptr_eq(&old, &world.chunks[&(0, 0)]));
++            assert!(world.dirty_light.is_empty() && world.dirty_sections.is_empty());
++            assert!(stream.is_lit(0, 0) && stream.meshed.contains(&(0, 0)));
++            assert_eq!(stream.generated_total, 0);
++            assert_eq!(stream.lighting.get(&(0, 0)), Some(&1));
++            assert_eq!(stream.light_snapshots.get(&(0, 0)), Some(&1));
++            assert_eq!(stream.meshing.get(&(0, 0, 0)), Some(&2));
++            assert_eq!(stream.compile_start((0, 0, 0)), Some(2));
++            for (x, z) in [(-134217725, 134217724), (134217724, -134217725)] {
++                stream
++                    .insert_remote_unlit(&mut world, Chunk::empty(x, z))
++                    .unwrap();
++                assert!(!stream.is_lit(x, z));
++                assert!(!stream.light_region_ready(&world, x, z));
++                assert!(stream.light_region(&world, x, z).is_none());
++            }
++            fixture.close();
++        }
++
++        #[test]
++        fn real_remote_workers_light_only_after_the_complete_region_arrives() {
++            for sky in [true, false] {
++                let mut fixture = Fixture::new();
++                let stream = fixture.stream.as_mut().unwrap();
++                stream.sky_light = sky;
++                let mut world = World::new(BlockStateId(0), 0);
++                for z in -1..=1 {
++                    for x in -1..=1 {
++                        if (x, z) != (1, 1) {
++                            stream
++                                .insert_remote_unlit(&mut world, Chunk::empty(x, z))
++                                .unwrap();
++                        }
++                    }
++                }
++                let (meshes, gone) = stream.update(&mut world);
++                assert!(meshes.is_empty() && gone.is_empty());
++                assert!(!stream.is_lit(0, 0));
++                assert!(stream.lighting.is_empty() && stream.pending() == 0);
++                let deadline = Instant::now() + Duration::from_secs(10);
++                stream
++                    .insert_remote_unlit(&mut world, Chunk::empty(1, 1))
++                    .unwrap();
++                let (meshes, gone) = stream.update(&mut world);
++                assert!(meshes.is_empty() && gone.is_empty());
++                assert!(!stream.is_lit(0, 0) && !world.chunks[&(0, 0)].lit);
++                assert!(stream.lighting.contains_key(&(0, 0)));
++                while !stream.is_lit(0, 0) {
++                    assert!(Instant::now() < deadline, "remote CPU lighting timed out");
++                    stream.wait(Duration::from_millis(10));
++                    let (meshes, gone) = stream.update(&mut world);
++                    assert!(meshes.is_empty() && gone.is_empty());
++                }
++                let centre = &world.chunks[&(0, 0)];
++                let expected = if sky { 0xF0 } else { 0 };
++                assert!(centre.lit && !centre.light_loaded);
++                assert!(
++                    centre
++                        .sections
++                        .iter()
++                        .all(|s| (0..4096).all(|i| s.light(i) == expected))
++                );
++                assert_eq!(
++                    stream.lit.len(),
++                    1,
++                    "fresh edge columns still need their own regions"
++                );
++                assert!(stream.lighting.is_empty() && stream.pending() == 0);
++                assert!(stream.generating.is_empty() && stream.protos.is_empty());
++                assert!(stream.meshing.is_empty() && stream.compile_started.is_empty());
++                fixture.close();
++            }
++        }
++    }
++
+     #[test]
+     fn a_resent_column_keeps_its_sections_but_takes_new_biomes() {
+         let mut old = Chunk::empty(2, -3);
