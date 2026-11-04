@@ -134,6 +134,8 @@
   "Peak Brightness": "Peak Brightness",
   "Black Level": "Black Level",
   "UI Brightness": "UI Brightness",
+  "Smooth Gradients": "Smooth Gradients",
+  "16-bit frame: dark skies and shadows don't band. A bit more VRAM. Next start.": "16-bit frame: dark skies and shadows don't band. A bit more VRAM. Next start.",
   "Battery Mode": "Battery Mode",
   "Graphics API": "Graphics API",
   "Translucent Batching": "Translucent Batching",
@@ -542,5 +544,6 @@
   "horizon.extras.cosmetics.hidden": "Hidden",
   "horizon.extras.cosmetics.name_tags": "Name tags only",
   "horizon.multiplayer.horizon_via.tricky_trials": "Tricky Trials",
-  "horizon.multiplayer.horizon_via.armored_paws": "Armored Paws"
+  "horizon.multiplayer.horizon_via.armored_paws": "Armored Paws",
+  "horizon.multiplayer.horizon_via.trails_tales": "Trails & Tales"
 }

@@ -232,11 +232,18 @@ fn allowed(path: &str) -> bool {
             path,
             "crates/horizon-protocol/examples/probe.rs"
                 | "crates/horizon-client-render/src/particles.rs"
+                | "crates/horizon-client/src/game/lan_particles.rs"
+                | "crates/horizon-client/src/game/remote.rs"
+                | "crates/horizon-client/src/game/remote_chat.rs"
+                | "crates/horizon-client/src/lan/io_pool.rs"
+                | "crates/horizon-client/src/item_sync.rs"
                 | "crates/horizon-client/src/net.rs"
+                | "crates/horizon-client/src/server_packs.rs"
                 | "crates/horizon-client/src/multiplayer.rs"
                 | "crates/horizon-client/src/title.rs"
                 | "crates/horizon-client/src/multiplayer/version_select.rs"
                 | "crates/horizon-client/assets/horizon/lang/en_us.json"
+                | "crates/horizon-world/src/datafix/json.rs"
         )
 }
 
@@ -398,9 +405,18 @@ mod tests {
     use serde_json::json;
     use std::sync::atomic::AtomicU64;
 
-    const REVISION: &str = "757ce1bd14f28647e503030d28744a8034b1f3b0";
+    const REVISION: &str = "d8edfbcd0f70aac5b41bab12b8bbf9cc3626de1f";
     const FIRST: &str = "crates/horizon-protocol/src/adapter.rs";
     const SECOND: &str = "crates/horizon-protocol/src/item/legacy.rs";
+    const EXTRA_RUNTIME: [&str; 7] = [
+        "crates/horizon-client/src/game/lan_particles.rs",
+        "crates/horizon-client/src/game/remote.rs",
+        "crates/horizon-client/src/game/remote_chat.rs",
+        "crates/horizon-client/src/lan/io_pool.rs",
+        "crates/horizon-client/src/server_packs.rs",
+        "crates/horizon-world/src/datafix/json.rs",
+        "crates/horizon-client/src/item_sync.rs",
+    ];
 
     struct Stage {
         root: PathBuf,
@@ -486,19 +502,35 @@ mod tests {
     #[test]
     fn applies_existing_and_new_sources_and_is_idempotent_across_line_endings() {
         let stage = Stage::new();
-        stage.manifest(vec![
+        let mut files = vec![
             stage.file(FIRST, Some("original\r\n"), "changed\r\n"),
             stage.file(SECOND, None, "added\n"),
-        ]);
-        assert_eq!(stage.apply().unwrap(), 2);
+        ];
+        files.extend(
+            EXTRA_RUNTIME
+                .iter()
+                .map(|path| stage.file(path, Some("old runtime\r\n"), "new runtime\r\n")),
+        );
+        stage.manifest(files);
+        let total = 2 + EXTRA_RUNTIME.len();
+        assert_eq!(stage.apply().unwrap(), total);
         assert_eq!(fs::read(stage.root.join(FIRST)).unwrap(), b"changed\n");
+        for path in EXTRA_RUNTIME {
+            assert_eq!(fs::read(stage.root.join(path)).unwrap(), b"new runtime\n");
+        }
         assert_eq!(stage.apply().unwrap(), 0);
         stage.write(FIRST, "changed\r\n");
         assert_eq!(stage.apply().unwrap(), 0);
         // A launcher rebuild restores the pristine source and removes added files.
         stage.write(FIRST, "original\n");
         fs::remove_file(stage.root.join(SECOND)).unwrap();
-        assert_eq!(stage.apply().unwrap(), 2);
+        for path in EXTRA_RUNTIME {
+            stage.write(path, "old runtime\n");
+        }
+        assert_eq!(stage.apply().unwrap(), total);
+        for path in EXTRA_RUNTIME {
+            assert_eq!(fs::read(stage.root.join(path)).unwrap(), b"new runtime\n");
+        }
     }
 
     #[test]
@@ -507,15 +539,20 @@ mod tests {
         stage.manifest(vec![
             stage.file(FIRST, Some("first original"), "first modded"),
             stage.file(SECOND, Some("second original"), "second modded"),
+            stage.file(EXTRA_RUNTIME[5], Some("world original"), "world modded"),
         ]);
-        stage.write(SECOND, "another mod's edit");
-        assert!(stage.apply().unwrap_err().contains(SECOND));
+        stage.write(EXTRA_RUNTIME[5], "another mod's edit");
+        assert!(stage.apply().unwrap_err().contains(EXTRA_RUNTIME[5]));
         assert_eq!(
             fs::read_to_string(stage.root.join(FIRST)).unwrap(),
             "first original"
         );
         assert_eq!(
             fs::read_to_string(stage.root.join(SECOND)).unwrap(),
+            "second original"
+        );
+        assert_eq!(
+            fs::read_to_string(stage.root.join(EXTRA_RUNTIME[5])).unwrap(),
             "another mod's edit"
         );
     }
@@ -580,6 +617,10 @@ mod tests {
             "crates\\horizon-protocol\\src\\adapter.rs",
             "C:/outside.rs",
             "crates/horizon-client/src/auth.rs",
+            "crates/horizon-client/src/game/auth.rs",
+            "crates/horizon-client/src/item_sync/other.rs",
+            "crates/horizon-client/src/item_sync_private.rs",
+            "crates/horizon-world/src/datafix/other.rs",
             "crates/horizon-protocol/src/adapter.rs:secret",
             "crates/horizon-protocol/src//adapter.rs",
         ] {

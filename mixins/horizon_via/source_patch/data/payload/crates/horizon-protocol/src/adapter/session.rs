@@ -8,8 +8,8 @@
 use std::{
     collections::{HashMap, VecDeque},
     sync::{
-        Mutex,
-        atomic::{AtomicU8, Ordering},
+        Arc, Mutex,
+        atomic::{AtomicBool, AtomicU8, Ordering},
     },
 };
 
@@ -20,6 +20,8 @@ use crate::{
     ids,
     packets::handshake,
 };
+
+mod pre_configuration;
 
 fn to_u8(state: State) -> u8 {
     match state {
@@ -52,6 +54,13 @@ pub struct Session {
     pub(super) trim_patterns: Mutex<HashMap<i32, i32>>,
     pub(super) legacy_recipes: Mutex<translate::v1_21_1::recipes::Recipes>,
     pub(super) legacy_boats: Mutex<HashMap<i32, translate::v1_21_1::boats::Boat>>,
+    pub(super) legacy_registries: Mutex<Arc<super::ids::LegacyRegistries>>,
+    pub(super) legacy_metadata: Mutex<translate::v1_20_3::Metadata>,
+    pub(super) legacy_items: Arc<Mutex<crate::item::v1_20_3::Cache>>,
+    pub(super) legacy_resource_packs: Mutex<translate::v1_20_2::ResourcePacks>,
+    pre_configuration: Mutex<pre_configuration::Bootstrap>,
+    login_requires_authentication: AtomicBool,
+    legacy_secure_chat_enforcement: Mutex<Option<bool>>,
     reading: AtomicU8,
     writing: AtomicU8,
     /// Entity UUIDs by network id, for a server that is told which entity a spectator picked by its UUID.
@@ -76,6 +85,13 @@ impl Session {
             trim_patterns: Mutex::new(HashMap::new()),
             legacy_recipes: Mutex::new(translate::v1_21_1::recipes::Recipes::default()),
             legacy_boats: Mutex::new(HashMap::new()),
+            legacy_registries: Mutex::new(Arc::new(super::legacy::registries(version))),
+            legacy_metadata: Mutex::new(Default::default()),
+            legacy_items: Arc::new(Mutex::new(Default::default())),
+            legacy_resource_packs: Mutex::new(Default::default()),
+            pre_configuration: Mutex::new(Default::default()),
+            login_requires_authentication: AtomicBool::new(false),
+            legacy_secure_chat_enforcement: Mutex::new(None),
             reading: AtomicU8::new(0),
             writing: AtomicU8::new(0),
             uuids: Mutex::new(HashMap::new()),
@@ -97,12 +113,54 @@ impl Session {
         self.writing.store(to_u8(state), Ordering::Release);
     }
 
+    pub(super) fn login_requires_authentication(&self) -> bool {
+        self.login_requires_authentication.load(Ordering::Acquire)
+    }
+
+    /// Before 1.20.5 this flag arrives in ServerData instead of the play login.
+    pub fn legacy_secure_chat_enforcement(&self) -> Option<bool> {
+        if !self.version.at_most(ServerVersion::V1_20_3) {
+            return None;
+        }
+        *self.legacy_secure_chat_enforcement.lock().unwrap()
+    }
+
+    pub(super) fn set_legacy_secure_chat_enforcement(&self, value: Option<bool>) {
+        *self.legacy_secure_chat_enforcement.lock().unwrap() = value;
+    }
+
     /// A packet the server sent, as the pinned version numbers and lays it out. `None` drops it: Horizon
     /// knows no such packet.
     pub fn clientbound(&self, id: i32, payload: Vec<u8>) -> Result<Option<(i32, Vec<u8>)>> {
         let state = self.reading();
-        if self.version.at_most(ServerVersion::V1_21_1) && state == State::Play && id == 65 {
+        if self.version == ServerVersion::V1_20_1 && state == State::Configuration {
+            return pre_configuration::clientbound(self, id, payload);
+        }
+        let _legacy = self
+            .version
+            .at_most(ServerVersion::V1_20_3)
+            .then(|| super::ids::legacy_registries(self.legacy_registries.lock().unwrap().clone()));
+        let _items = self
+            .version
+            .at_most(ServerVersion::V1_20_3)
+            .then(|| super::ids::legacy_items(self.legacy_items.clone()));
+        let recipe_book = if self.version == ServerVersion::V1_20_1 {
+            61
+        } else if self.version.at_most(ServerVersion::V1_20_3) {
+            63
+        } else {
+            65
+        };
+        if self.version.at_most(ServerVersion::V1_21_1) && state == State::Play && id == recipe_book
+        {
             return translate::v1_21_1::recipes::recipe_book(self, &payload).map(Some);
+        }
+        if self.version == ServerVersion::V1_20_1 && state == State::Play && id == 3 {
+            let (body, entity, uuid) = translate::v1_20_1::old_add_player(self, &payload)?;
+            self.legacy_metadata.lock().unwrap().forget(entity);
+            self.uuids.lock().unwrap().insert(entity, uuid);
+            self.kinds.lock().unwrap().insert(entity, 159);
+            return Ok(Some((ids::play::clientbound::ADD_ENTITY, body)));
         }
         // Vanilla 1.21.4's separate add_experience_orb (id 2) became AddEntity plus metadata.
         if self.version.at_most(ServerVersion::V1_21_4) && state == State::Play && id == 2 {
@@ -113,13 +171,20 @@ impl Session {
         };
         match (state, pinned) {
             (State::Login, ids::login::clientbound::LOGIN_FINISHED) => {
+                if self.version == ServerVersion::V1_20_1 {
+                    self.pre_configuration.lock().unwrap().login_finished();
+                }
                 self.set_reading(State::Configuration)
             }
             (State::Configuration, ids::configuration::clientbound::FINISH_CONFIGURATION) => {
                 self.set_reading(State::Play)
             }
             (State::Play, ids::play::clientbound::START_CONFIGURATION) => {
+                self.set_legacy_secure_chat_enforcement(None);
                 self.set_reading(State::Configuration)
+            }
+            (State::Play, ids::play::clientbound::LOGIN) => {
+                self.set_legacy_secure_chat_enforcement(None);
             }
             _ => {}
         }
@@ -137,6 +202,14 @@ impl Session {
                 Some((pinned, payload))
             }
         };
+        if state == State::Login
+            && let Some((id, payload)) = &translated
+            && let Ok(crate::packets::login::Clientbound::Hello(hello)) =
+                crate::packets::login::Clientbound::decode(*id, payload)
+        {
+            self.login_requires_authentication
+                .store(hello.should_authenticate, Ordering::Release);
+        }
         if self.version.at_most(ServerVersion::V1_21_1) && state == State::Play {
             if let Some((id, body)) = translated {
                 return translate::v1_21_1::boats::finish(self, id, body).map(Some);
@@ -149,9 +222,23 @@ impl Session {
     /// the server has no such packet, so nothing is sent.
     pub fn serverbound(&self, body: &[u8]) -> Result<Option<Vec<u8>>> {
         let state = self.writing();
+        let _legacy = self
+            .version
+            .at_most(ServerVersion::V1_20_3)
+            .then(|| super::ids::legacy_registries(self.legacy_registries.lock().unwrap().clone()));
+        let _items = self
+            .version
+            .at_most(ServerVersion::V1_20_3)
+            .then(|| super::ids::legacy_items(self.legacy_items.clone()));
         let mut r = Reader::new(body);
         let id = r.varint()?;
         let payload = r.rest();
+        if self.version == ServerVersion::V1_20_1
+            && matches!(state, State::Login | State::Configuration)
+            && let Some(result) = pre_configuration::serverbound(self, state, id, payload)?
+        {
+            return Ok(result);
+        }
         match (state, id) {
             (State::Handshake, ids::handshake::serverbound::INTENTION) => {
                 return self.intention(payload).map(Some);
@@ -178,7 +265,14 @@ impl Session {
 
     /// A packet the translation made that Horizon reads next, already in the pinned version's numbering.
     pub fn next_incoming(&self) -> Option<(i32, Vec<u8>)> {
-        self.incoming.lock().unwrap().pop_front()
+        let packet = self.incoming.lock().unwrap().pop_front();
+        if self.version == ServerVersion::V1_20_1
+            && let Some((ids::configuration::clientbound::FINISH_CONFIGURATION, payload)) = &packet
+            && payload.is_empty()
+        {
+            self.pre_configuration.lock().unwrap().finish_delivered();
+        }
+        packet
     }
     /// Bodies the translation added after the packet just sent, in the server's numbering.
     pub fn take_outgoing(&self) -> Vec<Vec<u8>> {
@@ -218,6 +312,148 @@ mod tests {
         w.varint(id);
         w.bytes(payload);
         w.data
+    }
+
+    fn old_play_id(version: ServerVersion, pinned: i32) -> i32 {
+        (0..256)
+            .find(|&id| version.clientbound_id(State::Play, id) == Some(pinned))
+            .unwrap()
+    }
+
+    fn old_login(version: ServerVersion) -> Vec<u8> {
+        let mut w = Writer::new();
+        w.i32(42);
+        w.bool(false);
+        w.varint(1);
+        w.string("minecraft:overworld");
+        for n in [20, 8, 6] {
+            w.varint(n);
+        }
+        for flag in [false, true, false] {
+            w.bool(flag);
+        }
+        if version.at_most(ServerVersion::V1_20_3) {
+            w.string("minecraft:overworld");
+        } else {
+            w.varint(0);
+        }
+        w.string("minecraft:overworld");
+        w.i64(0);
+        w.i8(0);
+        w.i8(-1);
+        for _ in 0..3 {
+            w.bool(false);
+        }
+        w.varint(0);
+        if !version.at_most(ServerVersion::V1_20_3) {
+            w.bool(true); // The newer login has its own enforcement flag.
+        }
+        w.data
+    }
+
+    #[test]
+    fn legacy_logins_preserve_the_encryption_requests_authentication_signal() {
+        use crate::packets::{login, play};
+        for version in [ServerVersion::V1_20_3, ServerVersion::V1_20_5] {
+            for authenticated in [false, true] {
+                let s = Session::new(version);
+                s.set_reading(State::Login);
+                // 765 had no opt-out bit: offline login omitted the encryption request.
+                if authenticated || version == ServerVersion::V1_20_5 {
+                    let mut hello = Writer::new();
+                    hello.string("");
+                    hello.byte_array(&[1, 2]);
+                    hello.byte_array(&[3, 4]);
+                    if version == ServerVersion::V1_20_5 {
+                        hello.bool(authenticated);
+                    }
+                    let (id, payload) = s.clientbound(1, hello.data).unwrap().unwrap();
+                    let login::Clientbound::Hello(hello) =
+                        login::Clientbound::decode(id, &payload).unwrap()
+                    else {
+                        panic!("hello")
+                    };
+                    assert_eq!(hello.should_authenticate, authenticated);
+                }
+                assert_eq!(s.login_requires_authentication(), authenticated);
+                if version == ServerVersion::V1_20_3 {
+                    Arc::make_mut(&mut s.legacy_registries.lock().unwrap()).insert(
+                        "minecraft:dimension_type".into(),
+                        crate::registry::Ids::from_names(vec!["minecraft:overworld".into()]),
+                    );
+                }
+                s.set_reading(State::Play);
+                let (id, payload) = s
+                    .clientbound(
+                        old_play_id(version, ids::play::clientbound::LOGIN),
+                        old_login(version),
+                    )
+                    .unwrap()
+                    .unwrap();
+                let play::Clientbound::Login(login) =
+                    play::Clientbound::decode(id, &payload).unwrap()
+                else {
+                    panic!("login")
+                };
+                assert_eq!(login.online_mode, authenticated, "{}", version.name());
+                assert_eq!(
+                    login.enforces_secure_chat,
+                    version == ServerVersion::V1_20_5
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn legacy_server_data_updates_and_resets_secure_chat_enforcement() {
+        use crate::buf::Codec;
+        use crate::packets::play;
+        use horizon_world::nbt::Tag;
+        let s = Session::new(ServerVersion::V1_20_3);
+        s.set_reading(State::Play);
+        let data = play::ServerData {
+            motd: Tag::String("Wire server".into()),
+            icon: None,
+        };
+        for enforced in [true, false] {
+            let mut w = Writer::new();
+            play::ServerData::write(&data, &mut w);
+            let expected = w.data.clone();
+            w.bool(enforced);
+            let (id, payload) = s
+                .clientbound(
+                    old_play_id(s.version, ids::play::clientbound::SERVER_DATA),
+                    w.data,
+                )
+                .unwrap()
+                .unwrap();
+            assert_eq!(payload, expected);
+            assert!(matches!(
+                play::Clientbound::decode(id, &payload).unwrap(),
+                play::Clientbound::ServerData(_)
+            ));
+            assert_eq!(s.legacy_secure_chat_enforcement(), Some(enforced));
+        }
+        s.set_legacy_secure_chat_enforcement(Some(true));
+        s.clientbound(
+            old_play_id(s.version, ids::play::clientbound::START_CONFIGURATION),
+            vec![],
+        )
+        .unwrap();
+        assert_eq!(s.legacy_secure_chat_enforcement(), None);
+        s.set_reading(State::Play);
+        s.set_legacy_secure_chat_enforcement(Some(true));
+        // Reset belongs to the login boundary even if a malformed body cannot be translated.
+        s.clientbound(
+            old_play_id(s.version, ids::play::clientbound::LOGIN),
+            vec![],
+        )
+        .unwrap();
+        assert_eq!(s.legacy_secure_chat_enforcement(), None);
+        assert_eq!(
+            Session::new(ServerVersion::Current).legacy_secure_chat_enforcement(),
+            None
+        );
     }
 
     #[test]

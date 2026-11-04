@@ -16,7 +16,8 @@ pub(crate) struct Boat {
 }
 
 pub(crate) fn spawn(session: &Session, old_kind: Option<i32>, entity: &play::AddEntity) {
-    if !matches!(old_kind, Some(10 | 17)) {
+    let kind = old_kind.and_then(|kind| session.version.ids()?.entity_type.up(kind));
+    if !matches!(kind, Some(90 | 91)) {
         session.legacy_boats.lock().unwrap().remove(&entity.id);
         return;
     }
@@ -24,7 +25,7 @@ pub(crate) fn spawn(session: &Session, old_kind: Option<i32>, entity: &play::Add
         entity.id,
         Boat {
             spawn: entity.clone(),
-            chest: old_kind == Some(17),
+            chest: kind == Some(91),
             replace: false,
             metadata: Vec::new(),
             passengers: None,

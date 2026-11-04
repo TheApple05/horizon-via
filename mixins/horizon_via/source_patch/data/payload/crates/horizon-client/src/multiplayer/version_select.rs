@@ -37,11 +37,13 @@ fn version_name(version: Option<ServerVersion>) -> String {
         Some(ServerVersion::V1_21_3) => "1.21.2–1.21.3".into(),
         Some(ServerVersion::V1_21_1) => "1.21–1.21.1".into(),
         Some(ServerVersion::V1_20_5) => "1.20.5–1.20.6".into(),
+        Some(ServerVersion::V1_20_3) => "1.20.3–1.20.4".into(),
+        Some(ServerVersion::V1_20_1) => "1.20–1.20.1".into(),
         Some(version) => version.name().into(),
     }
 }
 
-// Release names and dates are visible facts from the official, published selection screenshot.
+// Release names and dates follow the published selector and Mojang release announcements.
 fn details(version: Option<ServerVersion>) -> (&'static str, &'static str, &'static str) {
     match version {
         None => ("", "", "spyglass"),
@@ -57,6 +59,9 @@ fn details(version: Option<ServerVersion>) -> (&'static str, &'static str, &'sta
         Some(ServerVersion::V1_21_3) => ("bundles_of_bravery", "Oct 22, 2024", "bundle"),
         Some(ServerVersion::V1_21_1) => ("tricky_trials", "Jun 13, 2024", "trial_key"),
         Some(ServerVersion::V1_20_5) => ("armored_paws", "Apr 23, 2024", "armadillo_scute"),
+        Some(ServerVersion::V1_20_3) => ("trails_tales", "Dec 5, 2023", "decorated_pot"),
+        Some(ServerVersion::V1_20_2) => ("trails_tales", "Sep 21, 2023", "brush"),
+        Some(ServerVersion::V1_20_1) => ("trails_tales", "Jun 7, 2023", "cherry_sapling"),
     }
 }
 
@@ -430,7 +435,40 @@ mod tests {
         assert!(entries("1.21.1").contains(&Some(ServerVersion::V1_21_1)));
         assert_eq!(entries("1.20.5"), vec![Some(ServerVersion::V1_20_5)]);
         assert_eq!(entries("1.20.6"), vec![Some(ServerVersion::V1_20_5)]);
+        assert_eq!(entries("1.20.3"), vec![Some(ServerVersion::V1_20_3)]);
+        assert_eq!(entries("1.20.4"), vec![Some(ServerVersion::V1_20_3)]);
+        assert_eq!(entries("1.20.2"), vec![Some(ServerVersion::V1_20_2)]);
+        assert_eq!(entries("1.20.1"), vec![Some(ServerVersion::V1_20_1)]);
+        assert_eq!(
+            entries("1.20"),
+            vec![
+                Some(ServerVersion::V1_20_5),
+                Some(ServerVersion::V1_20_3),
+                Some(ServerVersion::V1_20_2),
+                Some(ServerVersion::V1_20_1),
+            ]
+        );
+        assert_eq!(version_name(Some(ServerVersion::V1_20_1)), "1.20–1.20.1");
+        assert!(entries("1.19.4").is_empty());
         assert!(entries("1.8.9").is_empty());
+    }
+
+    #[test]
+    fn every_picker_update_label_has_an_english_translation() {
+        assert_eq!(ServerVersion::ALL.len(), 15);
+        let translations: serde_json::Value =
+            serde_json::from_str(include_str!("../../assets/horizon/lang/en_us.json")).unwrap();
+        for version in ServerVersion::ALL {
+            let (update, _, _) = details(Some(version));
+            let key = format!("horizon.multiplayer.horizon_via.{update}");
+            assert!(
+                translations
+                    .get(&key)
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(|s| !s.is_empty()),
+                "missing picker translation {key}"
+            );
+        }
     }
 
     #[test]

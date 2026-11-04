@@ -171,6 +171,9 @@ pub enum ParticleData {
 /// `minecraft:particle_type` ids are registry ids and never negative, so this
 /// one cannot collide with a vanilla type.
 pub const MOD_PARTICLE_ID: i32 = -1;
+/// Adapter markers: pre-1.20.5 spell providers take their RGB from the spawn velocity.
+pub const LEGACY_ENTITY_EFFECT_PARTICLE_ID: i32 = -2;
+pub const LEGACY_AMBIENT_ENTITY_EFFECT_PARTICLE_ID: i32 = -3;
 /// `PositionSource.STREAM_CODEC`: a `minecraft:position_source_type` id
 /// (block 0, entity 1), then that type's data.
 #[derive(Clone, Debug, PartialEq)]
@@ -181,8 +184,19 @@ pub enum PositionSource {
 impl Particle {
     pub fn read(r: &mut Reader) -> Result<Particle> {
         let id = r.varint()?;
-        let id = if id == MOD_PARTICLE_ID {
+        let id = if matches!(
+            id,
+            MOD_PARTICLE_ID
+                | LEGACY_ENTITY_EFFECT_PARTICLE_ID
+                | LEGACY_AMBIENT_ENTITY_EFFECT_PARTICLE_ID
+        ) {
             id
+        } else if ids::quirks().legacy_item_nbt && matches!(id, 0 | 21) {
+            if id == 0 {
+                LEGACY_AMBIENT_ENTITY_EFFECT_PARTICLE_ID
+            } else {
+                LEGACY_ENTITY_EFFECT_PARTICLE_ID
+            }
         } else {
             ids::particle(id)
         };
@@ -208,8 +222,21 @@ impl Particle {
             22 => {
                 let legacy = ids::quirks().components_before_1_21_2;
                 let from = if legacy { legacy_rgb(r)? } else { r.i32()? };
+                let scale = if ids::quirks().legacy_item_nbt {
+                    Some(r.f32()?)
+                } else {
+                    None
+                };
                 let to = if legacy { legacy_rgb(r)? } else { r.i32()? };
-                Some(ParticleData::ColorScale2(from, to, r.f32()?))
+                Some(ParticleData::ColorScale2(
+                    from,
+                    to,
+                    if let Some(scale) = scale {
+                        scale
+                    } else {
+                        r.f32()?
+                    },
+                ))
             }
             23 | 56 => {
                 if ids::quirks().simple_spell_particles {
@@ -234,7 +261,16 @@ impl Particle {
             }
             57 => Some(ParticleData::Item(Template::read(r)?)),
             58 => {
-                let source = match r.varint()? {
+                let kind = if ids::quirks().vibration_source_identifier {
+                    match r.string(32767)?.as_str() {
+                        "minecraft:block" => 0,
+                        "minecraft:entity" => 1,
+                        _ => return Err(crate::Error::new("unknown legacy vibration source")),
+                    }
+                } else {
+                    r.varint()?
+                };
+                let source = match kind {
                     0 => PositionSource::Block(crate::buf::Pos::read(r)?),
                     1 => {
                         let id = r.varint()?;
@@ -365,8 +401,20 @@ fn read_value(kind: i32, r: &mut Reader) -> Result<Option<Value>> {
         LONG => Value::Long(r.varlong()?),
         FLOAT => Value::Float(r.f32()?),
         STRING => Value::String(r.string(32767)?),
-        COMPONENT => Value::Text(r.nbt()?),
-        OPTIONAL_COMPONENT => Value::OptText(if r.bool()? { Some(r.nbt()?) } else { None }),
+        COMPONENT => Value::Text(if ids::quirks().components_as_json {
+            crate::adapter::read_legacy_component(r)?
+        } else {
+            r.nbt()?
+        }),
+        OPTIONAL_COMPONENT => Value::OptText(if r.bool()? {
+            Some(if ids::quirks().components_as_json {
+                crate::adapter::read_legacy_component(r)?
+            } else {
+                r.nbt()?
+            })
+        } else {
+            None
+        }),
         ITEM_STACK => Value::Item(Slot::read(r)?),
         BOOLEAN => Value::Bool(r.bool()?),
         ROTATIONS | VECTOR3 => Value::Floats(vec![r.f32()?, r.f32()?, r.f32()?]),
@@ -480,7 +528,11 @@ impl Codec<Vec<(u8, i32, Value)>> for EntityData {
             if wire_kind == 16 && ids::quirks().shoulder_parrots_as_nbt {
                 // Player.DATA_SHOULDER_LEFT/RIGHT: only parrots occupy shoulders in vanilla. 1.21.9
                 // replaced their entity NBT with an optional Parrot.Variant (0 = absent, id + 1).
-                let tag = r.nbt()?;
+                let tag = if ids::quirks().legacy_named_nbt {
+                    r.named_nbt()?
+                } else {
+                    r.nbt()?
+                };
                 let parrot = matches!(tag.get("id"), Some(Tag::String(id)) if id.to_string_lossy() == "minecraft:parrot");
                 let variant = match tag.get("Variant") {
                     Some(Tag::Int(id)) if (0..5).contains(id) => *id,
@@ -521,6 +573,108 @@ mod tests {
     use super::*;
 
     #[test]
+    fn legacy_shoulders_keep_their_nbt_boundary_separate_from_text_components() {
+        use crate::adapter::{ServerVersion, ids::Way};
+        let parrot = Tag::compound([
+            ("id", Tag::String("minecraft:parrot".into())),
+            ("Variant", Tag::Int(3)),
+        ]);
+        let expected = vec![
+            (19, serializer::OPTIONAL_UNSIGNED_INT, Value::Id(4)),
+            (20, serializer::OPTIONAL_UNSIGNED_INT, Value::Id(0)),
+            (
+                2,
+                serializer::COMPONENT,
+                Value::Text(Tag::String("Metadata".into())),
+            ),
+            (21, serializer::BYTE, Value::Byte(7)),
+        ];
+        for version in [ServerVersion::V1_20_1, ServerVersion::V1_20_2] {
+            let mut old = Writer::new();
+            for (index, tag) in [(19, &parrot), (20, &Tag::End)] {
+                old.u8(index);
+                old.varint(16); // The old COMPOUND_TAG serializer used by player shoulders.
+                if version == ServerVersion::V1_20_1 {
+                    old.named_nbt(tag);
+                } else {
+                    old.nbt(tag);
+                }
+            }
+            old.u8(2);
+            old.varint(serializer::COMPONENT);
+            old.string(r#"{"text":"Metadata"}"#);
+            old.u8(21);
+            old.varint(serializer::BYTE);
+            old.i8(7);
+            old.u8(255);
+            old.u8(99);
+            let mut r = Reader::new(&old.data);
+            let entries = {
+                let _up = ids::renumbering(version.ids().unwrap(), Way::Up);
+                EntityData::read(&mut r).unwrap()
+            };
+            assert_eq!(entries, expected, "{version:?}");
+            assert_eq!(r.u8().unwrap(), 99);
+            assert_eq!(r.remaining(), 0);
+
+            // The pinned metadata has numeric shoulder variants and unnamed component NBT.
+            let mut current = Writer::new();
+            EntityData::write(&entries, &mut current);
+            assert_eq!(
+                EntityData::read(&mut Reader::new(&current.data)).unwrap(),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn vanilla_vibration_sources_cross_the_identifier_boundary() {
+        use crate::adapter::{ServerVersion, ids::Way};
+        // Actual ParticleOptions writers in the official 1.20.2 and 1.20.3 jars.
+        for (version, block, entity) in [
+            (
+                ServerVersion::V1_20_2,
+                "290f6d696e6563726166743a626c6f636b0000007fffffd04007",
+                "29106d696e6563726166743a656e74697479ac023f40000009",
+            ),
+            (
+                ServerVersion::V1_20_3,
+                "2b000000007fffffd04007",
+                "2b01ac023f40000009",
+            ),
+        ] {
+            for (wire, source, ticks) in [
+                (block, PositionSource::Block([1, 64, -3]), 7),
+                (
+                    entity,
+                    PositionSource::Entity {
+                        id: 300,
+                        y_offset: 0.75,
+                    },
+                    9,
+                ),
+            ] {
+                let mut bytes: Vec<u8> = (0..wire.len())
+                    .step_by(2)
+                    .map(|i| u8::from_str_radix(&wire[i..i + 2], 16).unwrap())
+                    .collect();
+                bytes.push(99);
+                let mut r = Reader::new(&bytes);
+                let p = {
+                    let _up = ids::renumbering(version.ids().unwrap(), Way::Up);
+                    Particle::read(&mut r).unwrap()
+                };
+                assert_eq!(p.id, 58);
+                assert_eq!(p.data, Some(ParticleData::Vibration { source, ticks }));
+                assert_eq!(r.u8().unwrap(), 99);
+                let mut w = Writer::new();
+                p.write(&mut w);
+                assert_eq!(Particle::read(&mut Reader::new(&w.data)).unwrap(), p);
+            }
+        }
+    }
+
+    #[test]
     fn vanilla_variant_wire_ids_survive_the_holder_boundaries() {
         use crate::adapter::{ServerVersion, ids::Way};
         // The real vanilla EntityDataSerializers encode registry slot 2 as these bytes.
@@ -552,6 +706,75 @@ mod tests {
         }
         let _up = ids::renumbering(ServerVersion::V1_21_1.ids().unwrap(), Way::Up);
         assert!(read_value(serializer::WOLF_VARIANT, &mut Reader::new(&[0, 99])).is_err());
+    }
+
+    #[test]
+    fn legacy_entity_effect_markers_leave_the_next_field_and_survive_pinned_roundtrip() {
+        use crate::adapter::{ServerVersion, ids::Way};
+        for (raw, marker) in [
+            (0, LEGACY_AMBIENT_ENTITY_EFFECT_PARTICLE_ID),
+            (21, LEGACY_ENTITY_EFFECT_PARTICLE_ID),
+        ] {
+            let data = [raw, 99];
+            let mut r = Reader::new(&data);
+            let particle = {
+                let _up = ids::renumbering(ServerVersion::V1_20_3.ids().unwrap(), Way::Up);
+                Particle::read(&mut r).unwrap()
+            };
+            assert_eq!(
+                particle,
+                Particle {
+                    id: marker,
+                    data: None
+                }
+            );
+            assert_eq!(r.u8().unwrap(), 99);
+            let mut w = Writer::new();
+            particle.write(&mut w);
+            let mut r = Reader::new(&w.data);
+            assert_eq!(Particle::read(&mut r).unwrap(), particle);
+            assert_eq!(r.remaining(), 0);
+        }
+    }
+
+    #[test]
+    fn dust_transition_keeps_each_release_scale_position() {
+        use crate::adapter::{ServerVersion, ids::Way};
+        // Actual DustColorTransitionOptions layouts: RGB,scale,RGB in765; RGB,RGB,scale in766.
+        for (version, raw, floats) in [
+            (
+                ServerVersion::V1_20_3,
+                15,
+                [0.25, 0.5, 0.75, 2.0, 1.0, 0.0, 0.5],
+            ),
+            (
+                ServerVersion::V1_20_5,
+                14,
+                [0.25, 0.5, 0.75, 1.0, 0.0, 0.5, 2.0],
+            ),
+        ] {
+            let mut w = Writer::new();
+            w.varint(raw);
+            for value in floats {
+                w.f32(value);
+            }
+            w.u8(99);
+            let mut r = Reader::new(&w.data);
+            let particle = {
+                let _up = ids::renumbering(version.ids().unwrap(), Way::Up);
+                Particle::read(&mut r).unwrap()
+            };
+            assert_eq!(
+                particle.data,
+                Some(ParticleData::ColorScale2(
+                    0xff3f7fbfu32 as i32,
+                    0xffff007fu32 as i32,
+                    2.0
+                ))
+            );
+            assert_eq!(r.u8().unwrap(), 99);
+            assert_eq!(r.remaining(), 0);
+        }
     }
 
     #[test]

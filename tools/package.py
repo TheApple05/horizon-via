@@ -35,16 +35,19 @@ def validate() -> tuple[dict, list[Path]]:
     seen = set()
     for entry in index['files']:
         path = entry['path']
-        assert path not in seen and '\\' not in path and ':' not in path
+        assert path.casefold() not in seen and '\\' not in path and ':' not in path
         assert not Path(path).is_absolute() and all(p not in ('', '.', '..') for p in path.split('/'))
         assert path.startswith('crates/')
-        seen.add(path)
+        seen.add(path.casefold())
         data = (crate / 'data/payload' / path).read_bytes()
         assert sha256(data) == entry['after_sha256'], path
         assert entry['before_sha256'] is None or re.fullmatch(r'[0-9a-f]{64}', entry['before_sha256'])
         # The source overlay must never depend on personal launcher integration.
         assert b'local_profile' not in data and b'prism_accounts_file' not in data, path
         assert not re.search(rb'(?:[A-Z]:[\\/]+Users[\\/]|/home/[^/]+/)', data), path
+    actual = {p.relative_to(crate / 'data/payload').as_posix().casefold()
+              for p in (crate / 'data/payload').rglob('*') if p.is_file()}
+    assert actual == seen, 'The payload and exact hash index differ'
     files = [ROOT / 'horizon-native.json'] + sorted(p for p in bundle.rglob('*') if p.is_file())
     assert len(files) <= 512 and sum(p.stat().st_size for p in files) <= 64 * 1024 * 1024
     for path in files:
@@ -82,7 +85,10 @@ def main() -> None:
     root_files = ['README.md', 'LICENSE', 'PROVENANCE.md', 'CHANGELOG.md', '.gitignore', 'horizon-native.json']
     source_files = [(p.relative_to(ROOT).as_posix(), p) for p in files if p.name != 'horizon-native.json']
     source_files += [(name, ROOT / name) for name in root_files]
-    source_files += [('tools/package.py', Path(__file__).resolve())]
+    developer_tools = ['package.py', 'generate_registry_id_adapter.py',
+                       'generate_packet_id_adapter.py', 'lab.py', 'test_registry_tables.py',
+                       'test_package.py']
+    source_files += [(f'tools/{name}', ROOT / 'tools' / name) for name in developer_tools]
     source = destination / f'{stem}-source.zip'
     archive(source, source_files)
     checksums = ''.join(f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n' for p in (mod, source))

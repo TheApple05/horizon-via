@@ -116,6 +116,23 @@ pub struct Session {
     far: Arc<crate::lod_net::Inbox>,
 }
 impl Session {
+    /// The negotiated wire release, once the connection has been established.
+    pub fn server_version(&self) -> horizon_protocol::adapter::ServerVersion {
+        self.writer.lock().unwrap().as_ref().map_or(
+            horizon_protocol::adapter::ServerVersion::Current,
+            ConnWriter::server_version,
+        )
+    }
+
+    /// Secure-chat enforcement synchronized later than login on older servers.
+    pub fn legacy_secure_chat_enforcement(&self) -> Option<bool> {
+        self.writer
+            .lock()
+            .unwrap()
+            .as_ref()
+            .and_then(ConnWriter::legacy_secure_chat_enforcement)
+    }
+
     /// Start connecting in the background, as `auth`'s account when there is one.
     pub fn connect(
         address: &str,
@@ -1273,6 +1290,96 @@ mod tests {
 
     #[test]
     fn direct_login_preserves_hostname_and_negotiates_brand() {
+        // The installable mod auto-detects the server with a separate status connection. Serve it
+        // alongside the already accepted login connection rather than making login wait on an
+        // unanswered ping. The same fixture also terminates promptly with detection disabled.
+        struct StatusResponder {
+            stop: Arc<AtomicBool>,
+            thread: Option<std::thread::JoinHandle<usize>>,
+        }
+        impl StatusResponder {
+            fn start(listener: std::net::TcpListener, port: u16) -> Self {
+                listener.set_nonblocking(true).unwrap();
+                let stop = Arc::new(AtomicBool::new(false));
+                let stopped = stop.clone();
+                let thread = std::thread::spawn(move || {
+                    use horizon_protocol::packets::status;
+                    let mut served = 0;
+                    while !stopped.load(Ordering::Acquire) {
+                        let stream = match listener.accept() {
+                            Ok((stream, _)) => stream,
+                            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                                std::thread::sleep(Duration::from_millis(5));
+                                continue;
+                            }
+                            Err(error) => panic!("status fixture accept failed: {error}"),
+                        };
+                        stream.set_nonblocking(false).unwrap();
+                        stream
+                            .set_read_timeout(Some(Duration::from_secs(2)))
+                            .unwrap();
+                        stream
+                            .set_write_timeout(Some(Duration::from_secs(2)))
+                            .unwrap();
+                        let mut status_connection = Connection::from_stream(stream).unwrap();
+                        let (id, body) = status_connection.recv().unwrap();
+                        let handshake::Serverbound::Intention(packet) =
+                            handshake::Serverbound::decode(id, &body).unwrap()
+                        else {
+                            panic!("expected status handshake")
+                        };
+                        assert_eq!((packet.host.as_str(), packet.port), ("localhost", port));
+                        assert_eq!(packet.intent, handshake::STATUS);
+                        assert_eq!(packet.protocol, PROTOCOL_VERSION);
+                        let (id, body) = status_connection.recv().unwrap();
+                        assert!(matches!(
+                            status::Serverbound::decode(id, &body).unwrap(),
+                            status::Serverbound::StatusRequest(_)
+                        ));
+                        status_connection.send(&status::Clientbound::StatusResponse(status::StatusResponse {
+                            json: serde_json::json!({
+                                "version": {"name": "synthetic", "protocol": PROTOCOL_VERSION},
+                                "players": {"max": 0, "online": 0},
+                                "description": {"text": "Synthetic status fixture"},
+                            }).to_string(),
+                        }).encode()).unwrap();
+                        let (id, body) = status_connection.recv().unwrap();
+                        let status::Serverbound::PingRequest(ping) =
+                            status::Serverbound::decode(id, &body).unwrap()
+                        else {
+                            panic!("expected status ping")
+                        };
+                        status_connection
+                            .send(&status::Clientbound::PongResponse(ping).encode())
+                            .unwrap();
+                        served += 1;
+                    }
+                    served
+                });
+                Self {
+                    stop,
+                    thread: Some(thread),
+                }
+            }
+
+            fn finish(mut self) -> usize {
+                self.stop.store(true, Ordering::Release);
+                self.thread
+                    .take()
+                    .unwrap()
+                    .join()
+                    .expect("status fixture failed")
+            }
+        }
+        impl Drop for StatusResponder {
+            fn drop(&mut self) {
+                self.stop.store(true, Ordering::Release);
+                if let Some(thread) = self.thread.take() {
+                    // Join on assertion failures too, without causing a second panic on unwind.
+                    let _ = thread.join();
+                }
+            }
+        }
         for server_brand in [
             b"\x07vanilla".as_slice(),
             b"\x07horizon",
@@ -1281,6 +1388,7 @@ mod tests {
         ] {
             let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
             let port = listener.local_addr().unwrap().port();
+            let expects_status = older_servers_enabled() && selected_server_version().is_none();
             let session = Session::connect(
                 &format!("localhost:{port}"),
                 "Probe",
@@ -1290,6 +1398,7 @@ mod tests {
                 PathBuf::new(),
             );
             let (stream, _) = listener.accept().unwrap();
+            let status = StatusResponder::start(listener.try_clone().unwrap(), port);
             stream
                 .set_read_timeout(Some(Duration::from_secs(5)))
                 .unwrap();
@@ -1368,6 +1477,7 @@ mod tests {
             );
             drop(server);
             drop(session);
+            assert_eq!(status.finish(), usize::from(expects_status));
         }
     }
 

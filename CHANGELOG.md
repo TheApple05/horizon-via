@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.0 — experimental
+
+- Retargeted the independent native mod to official Horizon `d8edfbcd0f70aac5b41bab12b8bbf9cc3626de1f`.
+- Imported the experimental 1.20.2 and 1.20.3/1.20.4 adapters, text/item bridges and resource-pack fixes into the mod's guarded source payload.
+- Added 1.20/1.20.1 packet and registry adapters, explicit named NBT handling, older item/recipe conversion and a per-connection configuration bridge for servers that enter play directly after login.
+- Preserved incoming custom potion effects and names in native inventory data, including nested item templates.
+- Preserved the existing version picker and added the new release groups to its searches and labels.
+- Extended the installer's exact runtime source allowlist and conflict/reset fixtures.
+- Updated the login and layout fixtures to exercise the mod's default-on detection and version picker.
+
+The corresponding GitHub release notes record the exact archive's checks, native loopback tests and remaining limits. Historical compatibility-branch results alone do not establish packaged-mod behavior. Full ViaFabricPlus parity remains unfinished, including legacy hover presentation and some edited potion reconstruction. This release is maintained as a separate mod.
+
 ## 0.1.0 — experimental
 
 - Extracted the native older-server adapters into a separate `.hnmod` source distribution pinned to an official Horizon revision.

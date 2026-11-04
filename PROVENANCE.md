@@ -2,8 +2,9 @@
 
 Horizon Via is an independent native compatibility extension, not an official ViaVersion product.
 
-- Base game: Horizon at `757ce1bd14f28647e503030d28744a8034b1f3b0` (official horizon-rust/horizon, MIT).
-- Compatibility source snapshot: TheApple05/horizon at `01166b25ae1e1ad71d32cf76ffaa5b485e8abcba` (MIT).
+- Base game for 0.2.0: Horizon at `d8edfbcd0f70aac5b41bab12b8bbf9cc3626de1f` (official horizon-rust/horizon, MIT).
+- Compatibility source: TheApple05/horizon at `7dde5f518c3a24117bdb7b2f28797bef8a06d22d`, merged with the official base above (MIT). Earlier source contributions are historical references; new compatibility work is maintained in this independent mod.
+- Version picker and mod installation behavior: this project's 0.1.0 source at `1d905edfb783f63a07f9bba734409481d4efb64a`, retained independently of personal launcher/authentication work.
 - Official horizon-mixins at `e8cd0aa38cffef49cb2e088ef716baa107148c02` (MIT, levzzz).
 - Generated protocol and registry maps were derived from independently inspected vanilla reports.
 - The original project inspected ViaFabricPlus README, LICENSE, AGENTS.md and build.gradle.kts metadata; no ViaFabricPlus or ViaVersion protocol/gameplay implementation was read or copied.

@@ -2281,8 +2281,14 @@ mod tests {
         let at = |screen: &Screen, w, h| -> Vec<(f32, f32)> {
             screen.buttons(w, h).iter().map(|b| (b.0, b.1)).collect()
         };
-        assert_eq!(at(&direct, 427.0, 334.0), [(113.0, 191.0), (113.0, 215.0)]);
-        assert_eq!(at(&direct, 320.0, 240.0), [(60.0, 168.0), (60.0, 192.0)]);
+        let mut large = vec![(113.0, 191.0), (113.0, 215.0)];
+        let mut small = vec![(60.0, 168.0), (60.0, 192.0)];
+        if crate::net::older_servers_enabled() {
+            large.push((322.0, 5.0));
+            small.push((215.0, 5.0));
+        }
+        assert_eq!(at(&direct, 427.0, 334.0), large);
+        assert_eq!(at(&direct, 320.0, 240.0), small);
         let friend = Screen::Friend {
             code: String::new(),
             relay: String::new(),

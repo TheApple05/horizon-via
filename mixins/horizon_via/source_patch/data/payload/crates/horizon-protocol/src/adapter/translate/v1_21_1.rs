@@ -106,7 +106,13 @@ pub(super) fn clientbound(
         cb::COOLDOWN => {
             let item = usize::try_from(r.varint()?)
                 .map_err(|_| crate::Error::new("negative cooldown item"))?;
-            let names = if session.version.at_most(ServerVersion::V1_20_5) {
+            let names = if session.version == ServerVersion::V1_20_1 {
+                crate::adapter::v1_20_1_ids::ITEM_NAMES
+            } else if session.version.at_most(ServerVersion::V1_20_2) {
+                crate::adapter::v1_20_2_ids::ITEM_NAMES
+            } else if session.version.at_most(ServerVersion::V1_20_3) {
+                crate::adapter::v1_20_3_ids::ITEM_NAMES
+            } else if session.version.at_most(ServerVersion::V1_20_5) {
                 crate::adapter::v1_20_5_ids::ITEM_NAMES
             } else {
                 crate::adapter::v1_21_1_ids::ITEM_NAMES

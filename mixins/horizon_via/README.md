@@ -4,9 +4,9 @@ Experimental cross-version multiplayer for **Horizon 26.3**, distributed as a se
 
 ## Install
 
-Download [horizon-via-0.1.0.hnmod](https://github.com/TheApple05/horizon-via/releases/download/v0.1.0/horizon-via-0.1.0.hnmod), then import it through the Horizon launcher's native mod workflow. Native mods compile a game for the instance where they are installed. They are not Java `.jar` files and do not run in Fabric or Forge.
+Import the `.hnmod` from this project's releases through the Horizon launcher's native mod workflow. Native mods compile a game for the instance where they are installed. They are not Java `.jar` files and do not run in Fabric or Forge. Use the matching release's archive and source ZIP.
 
-For the command line, extract [horizon-via-0.1.0-source.zip](https://github.com/TheApple05/horizon-via/releases/download/v0.1.0/horizon-via-0.1.0-source.zip), then run the official launcher from the extracted folder:
+For the command line, extract the matching source ZIP, then run the official launcher from the extracted folder:
 
 ```text
 horizon-launcher native-build . --instance "Horizon Via" --profile performance --trust-native-code
@@ -18,11 +18,11 @@ Open **Multiplayer → Horizon Via** to choose a target version. **Auto Detect**
 
 ## Compatibility
 
-The mod pins official Horizon source commit `757ce1bd14f28647e503030d28744a8034b1f3b0` and official horizon-mixins commit `e8cd0aa38cffef49cb2e088ef716baa107148c02`. It builds from the official game source, without a custom Horizon fork. Do not select “Build anyway” with a different source revision: this package deliberately refuses it.
+Version 0.2.0 pins official Horizon source commit `d8edfbcd0f70aac5b41bab12b8bbf9cc3626de1f` and official horizon-mixins commit `e8cd0aa38cffef49cb2e088ef716baa107148c02`. It builds from the official game source, without a custom Horizon fork. Do not select “Build anyway” with a different source revision: this package deliberately refuses it.
 
-Added experimental target slices: **1.20.5–1.20.6, 1.21–1.21.1, 1.21.2–1.21.3, 1.21.4, 1.21.5, 1.21.6, 1.21.7–1.21.8**. The pinned game already supplies adapters for **1.21.9–1.21.10, 1.21.11, 26.1–26.1.2 and 26.2**, plus its native 26.3 path. An adapter being listed is not a claim that every server or game behavior is verified.
+Experimental target slices: **1.20–1.20.1, 1.20.2, 1.20.3–1.20.4, 1.20.5–1.20.6, 1.21–1.21.1, 1.21.2–1.21.3, 1.21.4, 1.21.5, 1.21.6, 1.21.7–1.21.8**. The pinned game already supplies adapters for **1.21.9–1.21.10, 1.21.11, 26.1–26.1.2 and 26.2**, plus its native 26.3 path. These cover 24 named Java releases across 15 protocol groups. See the corresponding GitHub release notes for the exact package's validation evidence. An adapter being listed is not a claim that every server or game behavior is verified.
 
-Online authentication across all targets, modified servers, full playthroughs and complete old movement/combat behavior remain unverified. Older releases, snapshots, Classic/Alpha/Beta and Bedrock are unsupported. Some custom item/recipe/registry layouts remain unsupported. This is an experimental release, not complete ViaFabricPlus parity.
+Online authentication across all targets, modified servers, full playthroughs and complete old movement/combat behavior remain unverified. Native legacy item/entity hover presentation and reconstructing some edited potion contents for transmission remain incomplete. Older releases, snapshots, Classic/Alpha/Beta and Bedrock are unsupported. Some custom item/recipe/registry layouts remain unsupported. This is an experimental release, not complete ViaFabricPlus parity.
 
 ## How this native mod builds
 
