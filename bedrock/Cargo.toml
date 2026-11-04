@@ -1,0 +1,53 @@
+[package]
+name = "horizon-bedrock"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+description = "Unreleased native Bedrock backend foundation for Horizon"
+
+# Development workspace. Adoption by Horizon must carry these pins, root patches,
+# lockfile and notices through normal review; the existing hnmod cannot add them.
+[workspace]
+
+[features]
+default = []
+nethernet = ["dep:bedrock-client", "dep:bedrock-client-tokio", "dep:bedrock-net", "dep:p384", "dep:tokio"]
+
+[dependencies]
+bedrock-protocol = { package = "bedrock-protocol-contract-1-26-60", git = "https://github.com/cinnabar-mc/protocolgen", rev = "9eed056998235e4c01e0f3befabed651021dea77" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }
+sha2 = "0.10"
+uuid = "1"
+bedrock-net = { git = "https://github.com/cinnabar-mc/bedrock-net", rev = "9126e2b46a8987ad20889e535eb98850d869109d", optional = true }
+bedrock-client = { git = "https://github.com/cinnabar-mc/bedrock-net", rev = "9126e2b46a8987ad20889e535eb98850d869109d", optional = true }
+bedrock-client-tokio = { git = "https://github.com/cinnabar-mc/bedrock-net", rev = "9126e2b46a8987ad20889e535eb98850d869109d", features = ["nethernet"], optional = true }
+p384 = { version = "0.14", default-features = false, features = ["alloc", "ecdsa", "ecdh", "pkcs8"], optional = true }
+tokio = { version = "1", features = ["rt", "time", "macros", "sync"], optional = true }
+
+[dev-dependencies]
+bedrock-client-tokio = { git = "https://github.com/cinnabar-mc/bedrock-net", rev = "9126e2b46a8987ad20889e535eb98850d869109d", features = ["nethernet", "test-support"] }
+
+[[test]]
+name = "nethernet_login"
+path = "tests/nethernet_login.rs"
+required-features = ["nethernet"]
+
+[patch.crates-io]
+rtc = { git = "https://github.com/cinnabar-mc/rtc", rev = "96e92b5ffddd5d0492fd1948ce9a61657f2786df" }
+rtc-crypto = { git = "https://github.com/cinnabar-mc/rtc", rev = "96e92b5ffddd5d0492fd1948ce9a61657f2786df" }
+rtc-datachannel = { git = "https://github.com/cinnabar-mc/rtc", rev = "96e92b5ffddd5d0492fd1948ce9a61657f2786df" }
+rtc-dtls = { git = "https://github.com/cinnabar-mc/rtc", rev = "96e92b5ffddd5d0492fd1948ce9a61657f2786df" }
+rtc-ice = { git = "https://github.com/cinnabar-mc/rtc", rev = "96e92b5ffddd5d0492fd1948ce9a61657f2786df" }
+rtc-interceptor = { git = "https://github.com/cinnabar-mc/rtc", rev = "96e92b5ffddd5d0492fd1948ce9a61657f2786df" }
+rtc-media = { git = "https://github.com/cinnabar-mc/rtc", rev = "96e92b5ffddd5d0492fd1948ce9a61657f2786df" }
+rtc-mdns = { git = "https://github.com/cinnabar-mc/rtc", rev = "96e92b5ffddd5d0492fd1948ce9a61657f2786df" }
+rtc-rtcp = { git = "https://github.com/cinnabar-mc/rtc", rev = "96e92b5ffddd5d0492fd1948ce9a61657f2786df" }
+rtc-rtp = { git = "https://github.com/cinnabar-mc/rtc", rev = "96e92b5ffddd5d0492fd1948ce9a61657f2786df" }
+rtc-sctp = { git = "https://github.com/cinnabar-mc/rtc", rev = "96e92b5ffddd5d0492fd1948ce9a61657f2786df" }
+rtc-sdp = { git = "https://github.com/cinnabar-mc/rtc", rev = "96e92b5ffddd5d0492fd1948ce9a61657f2786df" }
+rtc-shared = { git = "https://github.com/cinnabar-mc/rtc", rev = "96e92b5ffddd5d0492fd1948ce9a61657f2786df" }
+rtc-srtp = { git = "https://github.com/cinnabar-mc/rtc", rev = "96e92b5ffddd5d0492fd1948ce9a61657f2786df" }
+rtc-stun = { git = "https://github.com/cinnabar-mc/rtc", rev = "96e92b5ffddd5d0492fd1948ce9a61657f2786df" }
+rtc-turn = { git = "https://github.com/cinnabar-mc/rtc", rev = "96e92b5ffddd5d0492fd1948ce9a61657f2786df" }
