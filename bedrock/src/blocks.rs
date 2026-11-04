@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-//! Deliberately limited semantic rules for ordinary dry natural terrain.
+//! Limited semantic rules for natural terrain and non-falling source water.
 //! Every result must exist exactly in the host's current block registry.
 use crate::{
     catalog::{BlockState, Property},
@@ -24,12 +24,17 @@ impl<'a, R: HostRegistry> TerrainRules<'a, R> {
 impl<R: HostRegistry> Mapper for TerrainRules<'_, R> {
     fn map_cell(&mut self, layers: &[&BlockState]) -> Option<HostBlockId> {
         let (base, additional) = layers.split_first()?;
-        if layers.len() > 8
-            || additional
-                .iter()
-                .any(|s| s.name != "minecraft:air" || !s.properties.is_empty())
-        {
+        // Only the ordinary second storage may contribute source water here.
+        // Extra non-air layers, multiple fluids and waterlogged solid blocks
+        // require other rules; none may be silently discarded.
+        if layers.len() == 2 && canonical_air(base) && source_water(additional[0]) {
+            return self.registry.resolve("minecraft:water", &[("level", "0")]);
+        }
+        if layers.len() > 8 || additional.iter().any(|s| !canonical_air(s)) {
             return None;
+        }
+        if source_water(base) {
+            return self.registry.resolve("minecraft:water", &[("level", "0")]);
         }
         // A whitelist prevents a new/custom or context-dependent same-name
         // block from acquiring guessed semantics merely because lookup works.
@@ -49,6 +54,19 @@ impl<R: HostRegistry> Mapper for TerrainRules<'_, R> {
         }
         None
     }
+}
+
+fn canonical_air(state: &BlockState) -> bool {
+    state.name == "minecraft:air" && state.properties.is_empty()
+}
+// Dragonfly's pinned MIT Water::EncodeBlock: Depth8 + Fallingfalse encodes
+// liquid_depth0 for either still/flowing name. No other depth is admitted.
+fn source_water(state: &BlockState) -> bool {
+    matches!(
+        state.name.as_str(),
+        "minecraft:water" | "minecraft:flowing_water"
+    ) && state.properties.len() == 1
+        && state.properties.get("liquid_depth") == Some(&Property::Int(0))
 }
 
 fn propertyless_ground(name: &str) -> bool {
@@ -149,6 +167,7 @@ mod tests {
             let id = match (name, properties) {
                 ("minecraft:air", []) => 405,
                 ("minecraft:stone", []) => 927,
+                ("minecraft:water", [("level", "0")]) => 811,
                 ("minecraft:oak_log", [("axis", "x")]) => 117,
                 ("minecraft:oak_log", [("axis", "y")]) => 118,
                 ("minecraft:oak_log", [("axis", "z")]) => 119,
@@ -221,5 +240,44 @@ mod tests {
             ],
         );
         assert!(mapper.map_cell(&[&log]).is_none());
+    }
+    #[test]
+    fn only_explicit_non_falling_source_water_composes_with_air() {
+        let mut mapper = TerrainRules::new(&Registry);
+        let air = state("minecraft:air", &[]);
+        let stone = state("minecraft:stone", &[]);
+        for name in ["minecraft:water", "minecraft:flowing_water"] {
+            let source = state(name, &[("liquid_depth", Property::Int(0))]);
+            for layers in [vec![&source], vec![&source, &air], vec![&air, &source]] {
+                assert_eq!(mapper.map_cell(&layers).unwrap().get(), 811);
+            }
+            for layers in [
+                vec![&stone, &source],
+                vec![&source, &source],
+                vec![&air, &source, &air],
+                vec![&air, &air, &source],
+            ] {
+                assert!(mapper.map_cell(&layers).is_none());
+            }
+            for depth in -1..=16 {
+                if depth != 0 {
+                    let water = state(name, &[("liquid_depth", Property::Int(depth))]);
+                    assert!(mapper.map_cell(&[&water]).is_none());
+                    assert!(mapper.map_cell(&[&air, &water]).is_none());
+                }
+            }
+            for properties in [
+                vec![("liquid_depth", Property::Byte(0))],
+                vec![("liquid_depth", Property::String("0".into()))],
+                vec![
+                    ("liquid_depth", Property::Int(0)),
+                    ("extra", Property::Byte(0)),
+                ],
+            ] {
+                let malformed = state(name, &properties);
+                assert!(mapper.map_cell(&[&malformed]).is_none());
+                assert!(mapper.map_cell(&[&air, &malformed]).is_none());
+            }
+        }
     }
 }

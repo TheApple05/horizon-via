@@ -70,13 +70,25 @@ uses no host-result tuple cache, including for empty storage. Missing neighborho
 data can be retried; the caller owns a stable context snapshot and rejects stale
 connection/dimension/chunk generations before applying a complete result.
 
-`blocks::TerrainRules` implements a narrow, explicit set of dry natural ground
-and axial log/stone rules. It requires exact lookup of the full resulting name
-and property set in the host's current registry, admits only canonical air in
-additional storage layers, and rejects unknown properties and unsupported blocks.
-It has no default-state or numeric-ID fallback. Fluids, grass snow context,
-leaves, slabs, stairs and other layer combinations still need semantic rules.
+`blocks::TerrainRules` implements a narrow, explicit set of natural ground,
+axial log/stone and non-falling source-water rules. It requires exact lookup of
+the full resulting name and property set in the host's current registry, admits
+only canonical air in
+additional storage layers, with an explicit exception for air plus source water
+in the ordinary second layer. It rejects unknown properties and unsupported blocks.
+It has no default-state or numeric-ID fallback. Source water is only typed
+`liquid_depth=0`, for either native water name; other depths, falling water,
+lava, waterlogged solids and extra non-air layers remain unsupported.
+Grass snow context, leaves, slabs, stairs and other layer combinations still
+need semantic rules.
 This library is not yet wired to Horizon's actual block registry or world.
+
+The source-water and log-axis rules are checked against Dragonfly's pinned MIT
+[water encoder](https://github.com/df-mc/dragonfly/blob/51dd9c1d615f17b70bbeef6ab2cbcee0545e66c0/server/block/water.go)
+and [log encoder](https://github.com/df-mc/dragonfly/blob/51dd9c1d615f17b70bbeef6ab2cbcee0545e66c0/server/block/log.go).
+The host adapter separately checks exact registry states; source-water validation
+also checks Horizon's actual fluid kind, amount and falling flag. This is a
+limited state translation, not equivalent fluid simulation or rendered-flow proof.
 
 Pinned Cinnabar-authored libraries have MIT grants. Their notices and the
 separate CC0 data dedication are retained in `notices/`. Imported protocol
