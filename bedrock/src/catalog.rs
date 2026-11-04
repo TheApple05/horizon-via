@@ -114,6 +114,12 @@ fn identifier(s: &str) -> bool {
 }
 
 impl Catalog {
+    /// The exact versioned CC0 identity snapshot shipped with this backend.
+    /// Loading still authenticates and validates every field; no private
+    /// development file or runtime download is needed for vanilla identities.
+    pub fn bundled() -> Result<Self, InvalidCatalog> {
+        Self::load(include_bytes!("../data/native-facts.json"))
+    }
     /// Loads the developer extractor's pinned identity-only output.
     /// Authenticates the complete extracted file before interpreting any fields.
     pub fn load(bytes: &[u8]) -> Result<Self, InvalidCatalog> {
@@ -218,6 +224,21 @@ impl Catalog {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bundled_facts_authenticate_and_resolve_the_complete_identity_domain() {
+        let catalog = Catalog::bundled().unwrap();
+        assert_eq!(catalog.states.len(), 23960);
+        assert_eq!(catalog.items.len(), 2080);
+        assert_eq!(catalog.biomes.len(), 89);
+        let air = catalog.air().unwrap();
+        assert_eq!((air.ordinal, air.hash), (18894, 3690217760));
+        for state in &catalog.states {
+            let hashed = catalog.block(RuntimeIds::Hashed, state.hash).unwrap();
+            let ordinal = catalog.block(RuntimeIds::Ordinal, state.ordinal).unwrap();
+            assert!(std::ptr::eq(hashed, ordinal));
+        }
+    }
 
     fn state(ordinal: u32, hash: u32, name: &str) -> BlockState {
         BlockState {

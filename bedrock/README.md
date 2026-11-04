@@ -16,6 +16,11 @@ produced by `../tools/bedrock/prepare_native_facts.py`. Block ordinals and full
 unsigned hashes are explicit distinct lookup modes. Unknown/custom identities
 remain unknown. Raw item stack measurements are not gameplay stack rules.
 Geometry, assets and mixed-input catalogs are not imported.
+`Catalog::bundled()` loads the same authenticated snapshot from the backend's
+own `data/native-facts.json`; vanilla identity lookup needs no private file or
+runtime download. The full CC0 dedication and version/hash provenance are
+included with it. Host semantic rules and custom server identities remain
+separate responsibilities.
 
 The optional `nethernet` feature adds settings and offline Login glue over an
 already admitted caller-owned transport. It retains the same connection and

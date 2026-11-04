@@ -1,0 +1,4 @@
+# These inputs are authenticated as raw bytes, including on Windows checkouts.
+mixins/horizon_via/source_patch/data/** -text
+bedrock/data/native-facts.json -text
+bedrock/host/streaming-unlit.patch -text
