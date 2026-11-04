@@ -65,6 +65,10 @@ layer combinations refuse the complete section. Empty storage requires canonical
 native air and an explicit host mapping. Returned host IDs are a mapper assertion,
 not native IDs; sections still require local lighting. Concrete block semantics,
 biomes, world insertion and presentation are not implemented by this boundary.
+The separate contextual mapper receives signed section/local coordinates and
+uses no host-result tuple cache, including for empty storage. Missing neighborhood
+data can be retried; the caller owns a stable context snapshot and rejects stale
+connection/dimension/chunk generations before applying a complete result.
 
 Pinned Cinnabar-authored libraries have MIT grants. Their notices and the
 separate CC0 data dedication are retained in `notices/`. Imported protocol

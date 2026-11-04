@@ -54,6 +54,28 @@ pub trait Mapper {
     /// unsupported semantics, not permission to substitute air/default state.
     fn map_cell(&mut self, layers: &[&BlockState]) -> Option<HostBlockId>;
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CellPosition {
+    pub section_y: i8,
+    pub x: u8,
+    pub y: u8,
+    pub z: u8,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MappingFailure {
+    MissingContext,
+    Unsupported,
+}
+pub trait ContextMapper {
+    /// Resolve only against one stable neighborhood snapshot/generation. Never
+    /// write the host world here: a later cell can still fail. The caller binds
+    /// connection/dimension/chunk ownership and rejects stale results on apply.
+    fn map_cell_at(
+        &mut self,
+        position: CellPosition,
+        layers: &[&BlockState],
+    ) -> Result<HostBlockId, MappingFailure>;
+}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TranslationError {
     ExcessiveLayers,
@@ -66,6 +88,11 @@ pub enum TranslationError {
         z: u8,
     },
     UnsupportedLayers {
+        x: u8,
+        y: u8,
+        z: u8,
+    },
+    MissingContext {
         x: u8,
         y: u8,
         z: u8,
@@ -89,6 +116,10 @@ impl fmt::Display for TranslationError {
             Self::UnsupportedLayers { x, y, z } => {
                 write!(f, "unsupported native block/layer semantics at {x},{y},{z}")
             }
+            Self::MissingContext { x, y, z } => write!(
+                f,
+                "native block mapping needs neighborhood context at {x},{y},{z}"
+            ),
         }
     }
 }
@@ -121,23 +152,39 @@ pub fn translate_subchunk(
     palette: &impl Palette,
     mapper: &mut impl Mapper,
 ) -> Result<MappedSection, TranslationError> {
+    translate_with(section, palette, true, |_, layers| {
+        mapper.map_cell(layers).ok_or(MappingFailure::Unsupported)
+    })
+}
+/// Position-dependent results are never cached by native identity. Even empty
+/// storage calls the mapper for every cell. Local Y becomes absolute only in
+/// caller context: `i32::from(section_y)*16 + i32::from(y)`.
+pub fn translate_contextual_subchunk(
+    section: &Subchunk,
+    palette: &impl Palette,
+    mapper: &mut impl ContextMapper,
+) -> Result<MappedSection, TranslationError> {
+    translate_with(section, palette, false, |position, layers| {
+        mapper.map_cell_at(position, layers)
+    })
+}
+fn translate_with(
+    section: &Subchunk,
+    palette: &impl Palette,
+    cache_host: bool,
+    mut map: impl FnMut(CellPosition, &[&BlockState]) -> Result<HostBlockId, MappingFailure>,
+) -> Result<MappedSection, TranslationError> {
     if section.layers.len() > 8 {
         return Err(TranslationError::ExcessiveLayers);
     }
     let mut cells = Box::new([HostBlockId(0); 4096]);
+    let mut native = HashMap::<[u32; 8], Vec<&BlockState>>::new();
     if section.layers.is_empty() {
         let air = palette
             .air()
             .filter(|s| s.name == "minecraft:air" && s.properties.is_empty())
             .ok_or(TranslationError::MissingAir)?;
-        let host = mapper
-            .map_cell(&[air])
-            .ok_or(TranslationError::UnsupportedLayers { x: 0, y: 0, z: 0 })?;
-        cells.fill(host);
-        return Ok(MappedSection {
-            section_y: section.section_y,
-            cells,
-        });
+        native.insert([0; 8], vec![air]);
     }
     let mut cache = HashMap::<[u32; 8], HostBlockId>::new();
     for y in 0..16u8 {
@@ -147,25 +194,50 @@ pub fn translate_subchunk(
                 for (i, layer) in section.layers.iter().enumerate() {
                     key[i] = layer.at(x, y, z).expect("bounded storage coordinate");
                 }
-                let host = match cache.get(&key) {
+                let cached = if cache_host { cache.get(&key) } else { None };
+                let host = match cached {
                     Some(host) => *host,
                     None => {
-                        let mut layers = Vec::with_capacity(section.layers.len());
-                        for (i, &wire_id) in key.iter().take(section.layers.len()).enumerate() {
-                            layers.push(palette.resolve(wire_id).ok_or(
-                                TranslationError::UnknownRuntime {
-                                    layer: i,
-                                    wire_id,
-                                    x,
-                                    y,
-                                    z,
-                                },
-                            )?);
+                        let layers = match native.entry(key) {
+                            std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+                            std::collections::hash_map::Entry::Vacant(entry) => {
+                                let mut layers = Vec::with_capacity(section.layers.len());
+                                for (i, &wire_id) in
+                                    key.iter().take(section.layers.len()).enumerate()
+                                {
+                                    layers.push(palette.resolve(wire_id).ok_or(
+                                        TranslationError::UnknownRuntime {
+                                            layer: i,
+                                            wire_id,
+                                            x,
+                                            y,
+                                            z,
+                                        },
+                                    )?);
+                                }
+                                entry.insert(layers)
+                            }
+                        };
+                        let host = map(
+                            CellPosition {
+                                section_y: section.section_y,
+                                x,
+                                y,
+                                z,
+                            },
+                            layers,
+                        )
+                        .map_err(|error| match error {
+                            MappingFailure::MissingContext => {
+                                TranslationError::MissingContext { x, y, z }
+                            }
+                            MappingFailure::Unsupported => {
+                                TranslationError::UnsupportedLayers { x, y, z }
+                            }
+                        })?;
+                        if cache_host {
+                            cache.insert(key, host);
                         }
-                        let host = mapper
-                            .map_cell(&layers)
-                            .ok_or(TranslationError::UnsupportedLayers { x, y, z })?;
-                        cache.insert(key, host);
                         host
                     }
                 };
@@ -387,5 +459,72 @@ mod tests {
             translate_subchunk(&section, &palette, &mut mapper),
             Err(TranslationError::ExcessiveLayers)
         ));
+    }
+    struct PerPosition {
+        calls: usize,
+        missing: bool,
+    }
+    impl ContextMapper for PerPosition {
+        fn map_cell_at(
+            &mut self,
+            position: CellPosition,
+            layers: &[&BlockState],
+        ) -> Result<HostBlockId, MappingFailure> {
+            self.calls += 1;
+            assert_eq!(position.section_y, -4);
+            if self.missing && (position.x, position.y, position.z) == (2, 7, 11) {
+                return Err(MappingFailure::MissingContext);
+            }
+            let id = if layers.len() == 1 && layers[0].name == "minecraft:air" {
+                405
+            } else {
+                100 + u32::from(position.x)
+            };
+            Ok(HostBlockId::from_registry_id(id))
+        }
+    }
+    #[test]
+    fn contextual_results_do_not_reuse_identity_only_cache_or_empty_fill() {
+        let (mut section, palette) = two_layers();
+        let mut mapper = PerPosition {
+            calls: 0,
+            missing: false,
+        };
+        let mapped = translate_contextual_subchunk(&section, &palette, &mut mapper).unwrap();
+        assert_eq!(mapped.cells()[0].get(), 100);
+        assert_eq!(mapped.cells()[1].get(), 101);
+        assert_eq!(mapped.cells()[1970].get(), 102);
+        assert_eq!(mapper.calls, 4096);
+        section.layers.clear();
+        mapper.calls = 0;
+        let mapped = translate_contextual_subchunk(&section, &palette, &mut mapper).unwrap();
+        assert!(mapped.cells().iter().all(|id| id.get() == 405));
+        assert_eq!(mapper.calls, 4096);
+    }
+    #[test]
+    fn missing_context_is_retryable_and_late_unknown_still_wins_before_mapping() {
+        let (section, mut palette) = two_layers();
+        let mut mapper = PerPosition {
+            calls: 0,
+            missing: true,
+        };
+        assert!(matches!(
+            translate_contextual_subchunk(&section, &palette, &mut mapper),
+            Err(TranslationError::MissingContext { x: 2, y: 7, z: 11 })
+        ));
+        assert_eq!(mapper.calls, 1971);
+        palette.0.remove(&0xf000_0002);
+        mapper.calls = 0;
+        assert!(matches!(
+            translate_contextual_subchunk(&section, &palette, &mut mapper),
+            Err(TranslationError::UnknownRuntime {
+                layer: 0,
+                x: 2,
+                y: 7,
+                z: 11,
+                ..
+            })
+        ));
+        assert_eq!(mapper.calls, 1970);
     }
 }
