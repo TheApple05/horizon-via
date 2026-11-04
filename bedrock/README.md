@@ -70,6 +70,14 @@ uses no host-result tuple cache, including for empty storage. Missing neighborho
 data can be retried; the caller owns a stable context snapshot and rejects stale
 connection/dimension/chunk generations before applying a complete result.
 
+`blocks::TerrainRules` implements a narrow, explicit set of dry natural ground
+and axial log/stone rules. It requires exact lookup of the full resulting name
+and property set in the host's current registry, admits only canonical air in
+additional storage layers, and rejects unknown properties and unsupported blocks.
+It has no default-state or numeric-ID fallback. Fluids, grass snow context,
+leaves, slabs, stairs and other layer combinations still need semantic rules.
+This library is not yet wired to Horizon's actual block registry or world.
+
 Pinned Cinnabar-authored libraries have MIT grants. Their notices and the
 separate CC0 data dedication are retained in `notices/`. Imported protocol
 documents, schemas, captures and mixed game-data catalogs are not relicensed by
