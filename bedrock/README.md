@@ -58,6 +58,14 @@ existing reference sources, runs their original palette/packing/varint methods
 offline with synthetic IDs, and compares all 36,864 cells across nine widths
 against the Rust decoder. It imports no world registry or game assets.
 
+`translation` converts decoded native Y-fast cells into the host's X-fast order.
+Its explicit palette mode resolves unsigned wire identities before a host-owned
+semantic mapper sees every ordered layer. Unknown identities and unsupported
+layer combinations refuse the complete section. Empty storage requires canonical
+native air and an explicit host mapping. Returned host IDs are a mapper assertion,
+not native IDs; sections still require local lighting. Concrete block semantics,
+biomes, world insertion and presentation are not implemented by this boundary.
+
 Pinned Cinnabar-authored libraries have MIT grants. Their notices and the
 separate CC0 data dedication are retained in `notices/`. Imported protocol
 documents, schemas, captures and mixed game-data catalogs are not relicensed by

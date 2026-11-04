@@ -6,6 +6,7 @@
 pub mod catalog;
 pub mod limits;
 pub mod storage;
+pub mod translation;
 
 #[cfg(feature = "nethernet")]
 pub mod negotiation;

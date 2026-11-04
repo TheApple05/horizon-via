@@ -204,6 +204,12 @@ impl Catalog {
     pub fn item(&self, wire_id: i32) -> Option<&ItemIdentity> {
         self.items.get(&wire_id)
     }
+    /// Canonical empty storage identity, never a fallback for an unknown ID.
+    pub fn air(&self) -> Option<&BlockState> {
+        self.states
+            .iter()
+            .find(|state| state.name == "minecraft:air" && state.properties.is_empty())
+    }
     pub fn biome(&self, name: &str) -> Option<u32> {
         self.biomes.get(name).copied()
     }
