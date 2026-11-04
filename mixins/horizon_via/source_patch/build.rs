@@ -7,6 +7,6 @@ fn main() {
     if let Err(error) = overlay::apply(std::path::Path::new(&manifest_dir), |path| {
         println!("cargo::rerun-if-changed={}", path.display());
     }) {
-        panic!("Horizon Via source patch refused: {error}");
+        panic!("ViaHorizon source patch refused: {error}");
     }
 }

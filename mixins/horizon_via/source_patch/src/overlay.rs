@@ -231,6 +231,22 @@ fn allowed(path: &str) -> bool {
         || matches!(
             path,
             "crates/horizon-protocol/examples/probe.rs"
+                | "crates/horizon-client-render/src/light.rs"
+                | "crates/horizon-client/src/game.rs"
+                | "crates/horizon-client/src/game/control.rs"
+                | "crates/horizon-client/src/game/remote_projectiles.rs"
+                | "crates/horizon-client/src/legacy47_flight.rs"
+                | "crates/horizon-client/src/projectiles.rs"
+                | "crates/horizon-protocol/src/adapter/v1_8_9/entity/fixtures/raw-fixtures.json"
+                | "crates/horizon-protocol/src/adapter/v1_8_9/entity/fixtures/vanilla-entity-fixtures.json"
+                | "crates/horizon-protocol/src/adapter/v1_8_9/inventory/extra-fixtures.json"
+                | "crates/horizon-protocol/src/adapter/v1_8_9/worldfx/fixtures/vanilla-worldfx-fixtures.json"
+                | "crates/horizon-protocol/src/adapter/v1_8_9/worldfx_extra/fixtures/bounds-oracle.hex"
+                | "crates/horizon-protocol/src/adapter/v1_8_9/worldfx_extra/fixtures/potion-oracle.hex"
+                | "crates/horizon-protocol/src/adapter/v1_8_9/worldfx_extra/fixtures/vanilla-extra-fixtures.json"
+                | "crates/horizon-protocol/tests/checked47.rs"
+                | "crates/horizon-protocol/tests/session47-goldens.json"
+                | "crates/horizon-protocol/tests/session47_public.rs"
                 | "crates/horizon-client-render/src/particles.rs"
                 | "crates/horizon-client/src/game/lan_particles.rs"
                 | "crates/horizon-client/src/game/remote.rs"
@@ -684,5 +700,35 @@ mod tests {
         symlink(&held_payload, &payload).unwrap();
         assert!(stage.apply().unwrap_err().contains("symlinks"));
         assert_eq!(fs::read_to_string(&target).unwrap(), "original");
+    }
+    #[test]
+    fn protocol47_new_paths_are_explicitly_allowlisted() {
+        for path in [
+            "crates/horizon-client-render/src/light.rs",
+            "crates/horizon-client/src/game.rs",
+            "crates/horizon-client/src/game/control.rs",
+            "crates/horizon-client/src/game/remote_projectiles.rs",
+            "crates/horizon-client/src/legacy47_flight.rs",
+            "crates/horizon-client/src/projectiles.rs",
+            "crates/horizon-protocol/src/adapter/v1_8_9/entity/fixtures/raw-fixtures.json",
+            "crates/horizon-protocol/src/adapter/v1_8_9/entity/fixtures/vanilla-entity-fixtures.json",
+            "crates/horizon-protocol/src/adapter/v1_8_9/inventory/extra-fixtures.json",
+            "crates/horizon-protocol/src/adapter/v1_8_9/worldfx/fixtures/vanilla-worldfx-fixtures.json",
+            "crates/horizon-protocol/src/adapter/v1_8_9/worldfx_extra/fixtures/bounds-oracle.hex",
+            "crates/horizon-protocol/src/adapter/v1_8_9/worldfx_extra/fixtures/potion-oracle.hex",
+            "crates/horizon-protocol/src/adapter/v1_8_9/worldfx_extra/fixtures/vanilla-extra-fixtures.json",
+            "crates/horizon-protocol/tests/checked47.rs",
+            "crates/horizon-protocol/tests/session47-goldens.json",
+            "crates/horizon-protocol/tests/session47_public.rs",
+        ] {
+            assert!(allowed(path), "{path}");
+        }
+        for path in [
+            "crates/horizon-protocol/src/adapter/v1_8_9/fixtures/unreviewed.json",
+            "crates/horizon-protocol/src/adapter/v1_8_9/fixtures/private.jar",
+            "crates/horizon-client/src/game/unreviewed.rs",
+        ] {
+            assert!(!allowed(path), "{path}");
+        }
     }
 }

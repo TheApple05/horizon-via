@@ -5,21 +5,123 @@ use crate::Error;
 use horizon_world::datafix::{self, dynamic as d, schema::Ty};
 use std::collections::{HashMap, VecDeque};
 
+mod numeric47_creative;
+pub(crate) fn try_write_numeric47_creative_stack(
+    stack: Option<&Stack>,
+    w: &mut Writer,
+) -> Result<()> {
+    // The canonical writer can remember a new original directly. Its exact-cache
+    // fast path needs no snapshot, but this entry point also covers that mutation.
+    if let Some(cache) = ids::legacy_item_cache() {
+        before_numeric47_cache_mutation(&cache.lock().unwrap());
+    }
+    numeric47_creative::try_write(stack, w)
+}
+
 const CACHE_ENTRIES: usize = 1024;
 const CACHE_BYTES: usize = 8 * 1024 * 1024;
 const CACHE_ENTRY_BYTES: usize = 256 * 1024;
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct Original {
     tag: Option<Tag>,
     bytes: usize,
 }
 /// Original NBT for unchanged stacks. Two old encodings that normalize to the same value are
 /// ambiguous: neither original is reused. Every session owns its cache; nothing is persisted.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct Cache {
+    numeric47: super::item47::Cache,
     entries: HashMap<Vec<u8>, Original>,
     order: VecDeque<Vec<u8>>,
     bytes: usize,
+}
+
+type SharedCache = std::sync::Arc<std::sync::Mutex<Cache>>;
+struct Numeric47TransactionState {
+    cache: SharedCache,
+    address: usize,
+    original: Option<Cache>,
+    rejected: bool,
+}
+thread_local! {
+    static NUMERIC47_TRANSACTIONS: std::cell::RefCell<Vec<std::rc::Rc<std::cell::RefCell<Numeric47TransactionState>>>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+/// Session47 holds its bridge mutex for this entire scope, serializing its reader
+/// and writer before either can touch the connection cache. A lazy copy includes
+/// both legacy item caches, including ambiguity/FIFO/budget changes. Other server
+/// versions and packets with no item mutation take no snapshot.
+pub(crate) struct Numeric47Transaction {
+    state: std::rc::Rc<std::cell::RefCell<Numeric47TransactionState>>,
+    committed: bool,
+}
+impl Numeric47Transaction {
+    pub(crate) fn new(cache: SharedCache) -> Self {
+        let address = {
+            let locked = cache.lock().unwrap();
+            &*locked as *const Cache as usize
+        };
+        let state = std::rc::Rc::new(std::cell::RefCell::new(Numeric47TransactionState {
+            cache,
+            address,
+            original: None,
+            rejected: false,
+        }));
+        NUMERIC47_TRANSACTIONS.with(|active| active.borrow_mut().push(state.clone()));
+        Self {
+            state,
+            committed: false,
+        }
+    }
+    pub(crate) fn commit(mut self) {
+        self.committed = true;
+    }
+}
+fn before_numeric47_cache_mutation(cache: &Cache) {
+    let address = cache as *const Cache as usize;
+    NUMERIC47_TRANSACTIONS.with(|active| {
+        for state in active.borrow().iter() {
+            let mut state = state.borrow_mut();
+            if state.address == address && state.original.is_none() {
+                state.original = Some(cache.clone());
+            }
+        }
+    });
+}
+/// Bridge::unavailable converts a rejected action to a successful local notice.
+/// Preserve that UI result while rolling back any speculative item-cache writes.
+pub(crate) fn reject_numeric47_transaction() {
+    NUMERIC47_TRANSACTIONS.with(|active| {
+        if let Some(state) = active.borrow().last() {
+            state.borrow_mut().rejected = true;
+        }
+    });
+}
+impl Drop for Numeric47Transaction {
+    fn drop(&mut self) {
+        let rollback = {
+            let mut state = self.state.borrow_mut();
+            if !self.committed || state.rejected {
+                state
+                    .original
+                    .take()
+                    .map(|original| (state.cache.clone(), original))
+            } else {
+                None
+            }
+        };
+        NUMERIC47_TRANSACTIONS.with(|active| {
+            active
+                .borrow_mut()
+                .retain(|state| !std::rc::Rc::ptr_eq(state, &self.state))
+        });
+        if let Some((cache, original)) = rollback {
+            let mut restored = cache
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            *restored = original;
+            cache.clear_poison();
+        }
+    }
 }
 impl Cache {
     fn key(stack: &Stack) -> Option<Vec<u8>> {
@@ -37,6 +139,7 @@ impl Cache {
         (w.data.len() <= CACHE_ENTRY_BYTES).then_some(w.data)
     }
     fn remember(&mut self, stack: &Stack, tag: Tag) {
+        before_numeric47_cache_mutation(self);
         let Some(key) = Self::key(stack) else {
             return;
         };
@@ -221,6 +324,53 @@ fn raw_nbt(value: &Tag) -> Component {
     w.nbt(value);
     Component::Raw(w.data)
 }
+/// Protocol 47 uses a numeric short id plus an independent damage short. Keep this
+/// path separate from the later bool/VarInt Slot codec; names must come from 1.8.9.
+pub(crate) fn from_numeric47_slot(
+    raw: super::item47::Raw47Slot,
+    old_name: impl FnOnce(i16) -> Option<String>,
+) -> Result<Stack> {
+    let saved = raw.upgrade(old_name)?;
+    // Resolve the fully upgraded name, including wool/dye/wood/potion variants.
+    let stack = from_tag(&saved, None)?;
+    let key = Cache::key(&stack)
+        .ok_or_else(|| Error::new("protocol 47 item cannot fit original cache key"))?;
+    let cache = ids::legacy_item_cache()
+        .ok_or_else(|| Error::new("missing connection-local protocol 47 item cache"))?;
+    let mut cache = cache.lock().unwrap();
+    before_numeric47_cache_mutation(&cache);
+    if !cache.numeric47.remember(key, &raw)? {
+        return Err(Error::new("protocol 47 item exceeds original cache budget"));
+    }
+    Ok(stack)
+}
+
+pub(crate) fn read_numeric47_stack(
+    r: &mut Reader,
+    old_name: impl FnOnce(i16) -> Option<String>,
+) -> Result<Option<Stack>> {
+    super::item47::read(r)?
+        .map(|raw| from_numeric47_slot(raw, old_name))
+        .transpose()
+}
+
+/// Only the fallible protocol 47 packet adapter calls this, so unsupported items
+/// propagate through Session::serverbound instead of silently becoming empty Slots.
+pub(crate) fn try_write_numeric47_stack(stack: Option<&Stack>, w: &mut Writer) -> Result<()> {
+    let Some(stack) = stack else {
+        return super::item47::try_write_slot(None, w);
+    };
+    let key = Cache::key(stack)
+        .ok_or_else(|| Error::new("protocol 47 item cannot fit original cache key"))?;
+    let cache = ids::legacy_item_cache()
+        .ok_or_else(|| Error::new("missing connection-local protocol 47 item cache"))?;
+    cache
+        .lock()
+        .unwrap()
+        .numeric47
+        .try_write_original(&key, stack.count, w)
+}
+
 pub(super) fn read_stack(r: &mut Reader) -> Result<Option<Stack>> {
     if !r.bool()? {
         return Ok(None);
@@ -1545,6 +1695,74 @@ fn banner_code(name: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn numeric47_transaction_rolls_back_nbt_collisions_and_is_connection_local() {
+        let cache = std::sync::Arc::new(std::sync::Mutex::new(Cache::default()));
+        let other = std::sync::Arc::new(std::sync::Mutex::new(Cache::default()));
+        let stack = Stack::new(1, 1);
+        let original = Tag::compound([("old", Tag::Int(1))]);
+        cache.lock().unwrap().remember(&stack, original.clone());
+        {
+            let transaction = Numeric47Transaction::new(cache.clone());
+            assert!(transaction.state.borrow().original.is_none());
+            other.lock().unwrap().remember(&stack, Tag::Int(7));
+            assert!(transaction.state.borrow().original.is_none());
+            cache.lock().unwrap().remember(&stack, Tag::Int(2));
+            assert_eq!(cache.lock().unwrap().original(&stack), None);
+            // An uncommitted conversion also restores ambiguity flags and budgets.
+        }
+        assert_eq!(cache.lock().unwrap().original(&stack), Some(original));
+        assert_eq!(other.lock().unwrap().original(&stack), Some(Tag::Int(7)));
+        let transaction = Numeric47Transaction::new(cache.clone());
+        cache
+            .lock()
+            .unwrap()
+            .remember(&Stack::new(2, 1), Tag::Int(3));
+        transaction.commit();
+        assert_eq!(
+            cache.lock().unwrap().original(&Stack::new(2, 1)),
+            Some(Tag::Int(3))
+        );
+    }
+
+    #[test]
+    fn numeric47_transaction_rejected_notice_rolls_back_a_successful_creative_cache_write() {
+        let cache = std::sync::Arc::new(std::sync::Mutex::new(Cache::default()));
+        let _pinned = ids::unrenumbered();
+        let _names = ids::legacy_registries(crate::adapter::v1_8_9::bootstrap::names());
+        let _items = ids::legacy_items(cache.clone());
+        let stone = Stack::new(1, 64);
+        let transaction = Numeric47Transaction::new(cache.clone());
+        let mut written = Writer::new();
+        try_write_numeric47_creative_stack(Some(&stone), &mut written).unwrap();
+        assert_eq!(written.data, [0, 1, 64, 0, 0, 0]);
+        // Same signal as Bridge::unavailable: outward Result is Ok, but this
+        // action is rejected after an earlier callback successfully remembered.
+        reject_numeric47_transaction();
+        transaction.commit();
+        assert!(try_write_numeric47_stack(Some(&stone), &mut Writer::new()).is_err());
+        let transaction = Numeric47Transaction::new(cache);
+        try_write_numeric47_creative_stack(Some(&stone), &mut Writer::new()).unwrap();
+        transaction.commit();
+        assert!(try_write_numeric47_stack(Some(&stone), &mut Writer::new()).is_ok());
+    }
+
+    #[test]
+    fn numeric47_transaction_unwind_restores_the_cache_and_clears_its_poison() {
+        let cache = std::sync::Arc::new(std::sync::Mutex::new(Cache::default()));
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe({
+            let cache = cache.clone();
+            move || {
+                let _transaction = Numeric47Transaction::new(cache.clone());
+                let mut locked = cache.lock().unwrap();
+                locked.remember(&Stack::new(1, 1), Tag::Int(9));
+                panic!("fixture callback panic");
+            }
+        }));
+        assert!(result.is_err());
+        assert!(cache.lock().unwrap().entries.is_empty());
+    }
 
     #[test]
     fn original_nbt_cache_preserves_json_and_opaque_entity_fields_and_rejects_collisions() {

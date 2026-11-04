@@ -739,7 +739,7 @@ impl Screen {
                         w - 105.0,
                         5.0,
                         100.0,
-                        &label("horizon.multiplayer.horizon_via.title", "Horizon Via"),
+                        &label("horizon.multiplayer.horizon_via.title", "ViaHorizon"),
                         true,
                         61,
                     ));
@@ -821,10 +821,7 @@ impl Screen {
                         w.ceil() - 105.0,
                         5.0,
                         100.0,
-                        &crate::lang::get_or(
-                            "horizon.multiplayer.horizon_via.title",
-                            "Horizon Via",
-                        ),
+                        &crate::lang::get_or("horizon.multiplayer.horizon_via.title", "ViaHorizon"),
                         true,
                         61,
                     ));
@@ -920,7 +917,7 @@ impl Screen {
             }
             Self::Versions(_) => ScreenInfo::new(
                 "protocol_selection",
-                get("horizon.multiplayer.horizon_via.title", "Horizon Via"),
+                get("horizon.multiplayer.horizon_via.title", "ViaHorizon"),
             ),
             Self::Edit { index, .. } => ScreenInfo::new(
                 "multiplayer/edit",

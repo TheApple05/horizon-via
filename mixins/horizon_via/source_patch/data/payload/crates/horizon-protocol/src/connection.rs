@@ -153,6 +153,13 @@ fn detached() -> std::io::Error {
     std::io::ErrorKind::NotConnected.into()
 }
 impl Stream {
+    fn read_timeout(&self) -> std::io::Result<Option<Duration>> {
+        match self {
+            Self::Tcp(s) => s.read_timeout(),
+            Self::Memory(p) => Ok(*p.timeout.lock().unwrap()),
+            Self::Detached => Ok(None),
+        }
+    }
     fn try_clone(&self) -> std::io::Result<Self> {
         Ok(match self {
             Self::Tcp(s) => Self::Tcp(s.try_clone()?),
@@ -221,6 +228,14 @@ pub struct Counters {
     pub bytes_out: AtomicI64,
 }
 
+struct ReadTiming {
+    /// The caller's timeout, independent of a protocol47 polling slice.
+    requested: Option<Duration>,
+    last_network_progress: Instant,
+    /// Reporting a timeout ends that attempt; an explicit caller retry gets a new budget.
+    restart_after_timeout: bool,
+}
+
 pub struct ConnReader {
     stream: Stream,
     /// Bytes read: `buffer[start..end]` are not consumed yet, and reads go
@@ -234,6 +249,7 @@ pub struct ConnReader {
     pub counters: Arc<Counters>,
     /// Set for a server of an older release: what arrives is renumbered.
     adapter: Option<Arc<crate::adapter::Session>>,
+    read_timing: Mutex<ReadTiming>,
 }
 /// Closes a connection from another thread: a read or a write blocked on it fails.
 pub struct Closer(Stream);
@@ -350,6 +366,7 @@ impl Connection {
     fn over(stream: Stream) -> Result<Self> {
         let counters = Arc::new(Counters::default());
         let write = stream.try_clone()?;
+        let requested = stream.read_timeout()?;
         Ok(Self {
             reader: ConnReader {
                 stream,
@@ -361,6 +378,11 @@ impl Connection {
                 threshold: None,
                 counters: counters.clone(),
                 adapter: None,
+                read_timing: Mutex::new(ReadTiming {
+                    requested,
+                    last_network_progress: Instant::now(),
+                    restart_after_timeout: false,
+                }),
             },
             writer: ConnWriter {
                 stream: write,
@@ -404,6 +426,10 @@ impl Connection {
     pub fn recv(&mut self) -> Result<(i32, Vec<u8>)> {
         self.reader.recv()
     }
+    /// Consume protocol47's trusted spawn acceleration while using the unsplit connection.
+    pub fn take_legacy47_projectile_acceleration(&self, id: i32) -> Option<[f64; 3]> {
+        self.reader.take_legacy47_projectile_acceleration(id)
+    }
     pub fn split(self) -> (ConnReader, ConnWriter) {
         (self.reader, self.writer)
     }
@@ -432,14 +458,51 @@ enum Next {
     Partial(usize),
 }
 impl ConnReader {
+    /// Consume trusted adapter extras with their decoded AddEntity on the receive thread.
+    pub fn take_legacy47_projectile_acceleration(&self, id: i32) -> Option<[f64; 3]> {
+        self.adapter
+            .as_ref()
+            .and_then(|a| a.take_legacy47_projectile_acceleration(id))
+    }
     /// Read exactly `len` bytes as they are, with no framing.
     pub fn read_raw(&mut self, len: usize) -> Result<Vec<u8>> {
         let mut out = vec![0u8; len];
         self.stream.read_exact(&mut out)?;
+        if len != 0 && self.is_legacy47() {
+            let mut timing = self.read_timing.lock().unwrap();
+            timing.last_network_progress = Instant::now();
+            timing.restart_after_timeout = false;
+        }
         Ok(out)
     }
     /// Block until a whole packet arrives: (id, payload).
     pub fn recv(&mut self) -> Result<(i32, Vec<u8>)> {
+        if self.is_legacy47() {
+            {
+                let mut timing = self.read_timing.lock().unwrap();
+                if timing.restart_after_timeout {
+                    timing.last_network_progress = Instant::now();
+                    timing.restart_after_timeout = false;
+                }
+            }
+            let result = self.recv_legacy47();
+            // A local queue delivery or an error must not leave short polling
+            // timeouts installed for read_raw or a later connection mode.
+            let requested = self.read_timing.lock().unwrap().requested;
+            let restored = self.stream.set_read_timeout(requested);
+            return match result {
+                Ok(packet) => {
+                    restored?;
+                    Ok(packet)
+                }
+                Err(error) => {
+                    if error.is_timed_out() {
+                        self.read_timing.lock().unwrap().restart_after_timeout = true;
+                    }
+                    Err(error)
+                }
+            };
+        }
         if let Some(packet) = self.adapter.as_ref().and_then(|a| a.next_incoming()) {
             return Ok(packet);
         }
@@ -458,6 +521,53 @@ impl ConnReader {
                 },
                 Next::Empty => {}
                 Next::Partial(wanted) => self.fill(wanted)?,
+            }
+        }
+    }
+
+    fn is_legacy47(&self) -> bool {
+        self.adapter
+            .as_ref()
+            .is_some_and(|a| a.version == crate::adapter::ServerVersion::V1_8_9)
+    }
+
+    fn recv_legacy47(&mut self) -> Result<(i32, Vec<u8>)> {
+        const POLL: Duration = Duration::from_millis(20);
+        loop {
+            let slice = {
+                let timing = self.read_timing.lock().unwrap();
+                match timing.requested {
+                    None => POLL,
+                    Some(timeout) => {
+                        let left = timeout.saturating_sub(timing.last_network_progress.elapsed());
+                        if left.is_zero() {
+                            return Err(Error::timed_out());
+                        }
+                        left.min(POLL)
+                    }
+                }
+            };
+            // Check the original deadline before local input: a stream of UI
+            // corrections must not keep a network-silent connection alive.
+            if let Some(packet) = self.adapter.as_ref().and_then(|a| a.next_incoming()) {
+                return Ok(packet);
+            }
+            match self.next()? {
+                Next::Packet(packet) => {
+                    if let Some(adapter) = &self.adapter
+                        && let Some(packet) = adapter.clientbound(packet.0, packet.1)?
+                    {
+                        return Ok(packet);
+                    }
+                }
+                Next::Empty => {}
+                Next::Partial(wanted) => {
+                    self.stream.set_read_timeout(Some(slice))?;
+                    match self.fill(wanted) {
+                        Err(error) if error.is_timed_out() => {}
+                        result => result?,
+                    }
+                }
             }
         }
     }
@@ -577,6 +687,11 @@ impl ConnReader {
             c.decrypt(data);
         }
         self.end += n;
+        if n != 0 && self.is_legacy47() {
+            let mut timing = self.read_timing.lock().unwrap();
+            timing.last_network_progress = Instant::now();
+            timing.restart_after_timeout = false;
+        }
         Ok(n)
     }
     /// A [`Closer`] for this connection.
@@ -584,9 +699,18 @@ impl ConnReader {
         Ok(Closer(self.stream.try_clone()?))
     }
     pub fn set_read_timeout(&self, timeout: Option<Duration>) -> Result<()> {
-        Ok(self.stream.set_read_timeout(timeout)?)
+        self.stream.set_read_timeout(timeout)?;
+        let mut timing = self.read_timing.lock().unwrap();
+        timing.requested = timeout;
+        timing.last_network_progress = Instant::now();
+        timing.restart_after_timeout = false;
+        Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "connection/poll47_tests.rs"]
+mod poll47_tests;
 impl ConnWriter {
     /// The server release selected for this connection (local play uses the pinned release).
     pub fn server_version(&self) -> crate::adapter::ServerVersion {
@@ -621,6 +745,22 @@ impl ConnWriter {
             return Ok(());
         }
         self.send_contents(&frame::contents(body, self.threshold)?)
+    }
+    /// Send with a trusted local translation outcome, without draining reader packets.
+    pub fn send_checked(&mut self, body: &[u8]) -> Result<crate::adapter::SendDisposition> {
+        use crate::adapter::SendDisposition as D;
+        if let Some(adapter) = self.adapter.clone() {
+            let (body, outcome) = adapter.serverbound_checked(body)?;
+            if let Some(body) = body {
+                self.send_contents(&frame::contents(&body, self.threshold)?)?;
+            }
+            for body in adapter.take_outgoing() {
+                self.send_contents(&frame::contents(&body, self.threshold)?)?;
+            }
+            return Ok(outcome);
+        }
+        self.send_contents(&frame::contents(body, self.threshold)?)?;
+        Ok(D::Sent)
     }
     /// Send a frame whose contents [`frame::contents`] made with this
     /// writer's threshold.

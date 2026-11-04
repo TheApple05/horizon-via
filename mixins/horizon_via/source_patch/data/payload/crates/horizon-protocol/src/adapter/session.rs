@@ -59,6 +59,7 @@ pub struct Session {
     pub(super) legacy_items: Arc<Mutex<crate::item::v1_20_3::Cache>>,
     pub(super) legacy_resource_packs: Mutex<translate::v1_20_2::ResourcePacks>,
     pre_configuration: Mutex<pre_configuration::Bootstrap>,
+    legacy47: Mutex<super::v1_8_9::bridge::Bridge>,
     login_requires_authentication: AtomicBool,
     legacy_secure_chat_enforcement: Mutex<Option<bool>>,
     reading: AtomicU8,
@@ -90,6 +91,7 @@ impl Session {
             legacy_items: Arc::new(Mutex::new(Default::default())),
             legacy_resource_packs: Mutex::new(Default::default()),
             pre_configuration: Mutex::new(Default::default()),
+            legacy47: Mutex::new(Default::default()),
             login_requires_authentication: AtomicBool::new(false),
             legacy_secure_chat_enforcement: Mutex::new(None),
             reading: AtomicU8::new(0),
@@ -99,6 +101,16 @@ impl Session {
             incoming: Mutex::new(VecDeque::new()),
             outgoing: Mutex::new(Vec::new()),
         }
+    }
+    /// This is adapter-owned state, never a wire opcode or custom payload channel.
+    pub fn take_legacy47_projectile_acceleration(&self, id: i32) -> Option<[f64; 3]> {
+        if self.version != ServerVersion::V1_8_9 {
+            return None;
+        }
+        self.legacy47
+            .lock()
+            .unwrap()
+            .take_projectile_acceleration(id)
     }
     pub fn reading(&self) -> State {
         from_u8(self.reading.load(Ordering::Acquire))
@@ -133,6 +145,27 @@ impl Session {
     /// knows no such packet.
     pub fn clientbound(&self, id: i32, payload: Vec<u8>) -> Result<Option<(i32, Vec<u8>)>> {
         let state = self.reading();
+        if self.version == ServerVersion::V1_8_9 {
+            let _pinned = super::ids::unrenumbered();
+            let _names = super::ids::legacy_registries(super::v1_8_9::bootstrap::names());
+            let _items = super::ids::legacy_items(self.legacy_items.clone());
+            let mut bridge = self.legacy47.lock().unwrap();
+            let transaction =
+                crate::item::v1_20_3::Numeric47Transaction::new(self.legacy_items.clone());
+            let result = bridge.clientbound(state, id, payload)?;
+            self.login_requires_authentication
+                .store(bridge.online_mode(), Ordering::Release);
+            if let Some(phase) = result.phase {
+                self.set_reading(phase);
+            }
+            self.outgoing.lock().unwrap().extend(result.outgoing);
+            // A local prediction/correction queued while the reader was blocked must precede
+            // this newer server update. Keep one FIFO for both, under the same bridge ordering.
+            self.incoming.lock().unwrap().extend(result.packets);
+            transaction.commit();
+            drop(bridge); // next_incoming marks virtual finish delivery through this mutex.
+            return Ok(self.next_incoming());
+        }
         if self.version == ServerVersion::V1_20_1 && state == State::Configuration {
             return pre_configuration::clientbound(self, id, payload);
         }
@@ -221,6 +254,9 @@ impl Session {
     /// A packet body (VarInt id + payload) Horizon sends, as this server numbers and lays it out. `None`:
     /// the server has no such packet, so nothing is sent.
     pub fn serverbound(&self, body: &[u8]) -> Result<Option<Vec<u8>>> {
+        if self.version == ServerVersion::V1_8_9 {
+            return self.serverbound47(body, false).map(|(body, _)| body);
+        }
         let state = self.writing();
         let _legacy = self
             .version
@@ -263,9 +299,87 @@ impl Session {
         Ok(Some(w.data))
     }
 
+    /// Synchronous local acceptance. This never removes packets from the reader's FIFO.
+    pub fn serverbound_checked(
+        &self,
+        body: &[u8],
+    ) -> Result<(Option<Vec<u8>>, super::SendDisposition)> {
+        if self.version == ServerVersion::V1_8_9 {
+            return self.serverbound47(body, true);
+        }
+        let translated = self.serverbound(body)?;
+        let disposition = if translated.is_some() {
+            super::SendDisposition::Sent
+        } else {
+            super::SendDisposition::Consumed
+        };
+        Ok((translated, disposition))
+    }
+
+    fn serverbound47(
+        &self,
+        body: &[u8],
+        checked: bool,
+    ) -> Result<(Option<Vec<u8>>, super::SendDisposition)> {
+        use super::SendDisposition as D;
+        let state = self.writing();
+        let mut r = Reader::new(body);
+        let id = r.varint()?;
+        let payload = r.rest();
+        if state == State::Handshake {
+            return self
+                .intention(payload)
+                .map(|packet| (Some(packet), D::Sent));
+        }
+        let _pinned = super::ids::unrenumbered();
+        let _names = super::ids::legacy_registries(super::v1_8_9::bootstrap::names());
+        let _items = super::ids::legacy_items(self.legacy_items.clone());
+        let mut bridge = self.legacy47.lock().unwrap();
+        // Older local output remains in FIFO order; only this call's new correction is eligible.
+        self.incoming
+            .lock()
+            .unwrap()
+            .extend(bridge.take_predictions());
+        let transaction =
+            crate::item::v1_20_3::Numeric47Transaction::new(self.legacy_items.clone());
+        let result = bridge.serverbound(state, id, payload)?;
+        let disposition = if bridge.rejected_locally() {
+            D::LocallyRejected
+        } else if result.packet.is_some() || !result.extra.is_empty() {
+            D::Sent
+        } else {
+            D::Consumed
+        };
+        if let Some(phase) = result.phase {
+            self.set_writing(phase);
+        }
+        let own = bridge.take_predictions();
+        let native_restores_slot = checked
+            && disposition == D::LocallyRejected
+            && state == State::Play
+            && id == ids::play::serverbound::SET_CREATIVE_MODE_SLOT;
+        self.incoming
+            .lock()
+            .unwrap()
+            .extend(own.into_iter().filter(|(id, _)| {
+                !(native_restores_slot && *id == ids::play::clientbound::CONTAINER_SET_CONTENT)
+            }));
+        let mut outgoing = self.outgoing.lock().unwrap();
+        outgoing.extend(result.packet);
+        outgoing.extend(result.extra);
+        transaction.commit();
+        Ok((None, disposition))
+    }
+
     /// A packet the translation made that Horizon reads next, already in the pinned version's numbering.
     pub fn next_incoming(&self) -> Option<(i32, Vec<u8>)> {
         let packet = self.incoming.lock().unwrap().pop_front();
+        if self.version == ServerVersion::V1_8_9
+            && let Some((ids::configuration::clientbound::FINISH_CONFIGURATION, payload)) = &packet
+            && payload.is_empty()
+        {
+            self.legacy47.lock().unwrap().finish_delivered();
+        }
         if self.version == ServerVersion::V1_20_1
             && let Some((ids::configuration::clientbound::FINISH_CONFIGURATION, payload)) = &packet
             && payload.is_empty()
@@ -523,5 +637,32 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(sent, vec![49, 7]);
+    }
+}
+
+#[cfg(test)]
+mod legacy47_acceleration_reader_tests {
+    use super::*;
+    #[test]
+    fn adapter_exposes_only_trusted_pending_fireball_state() {
+        let session = Session::new(ServerVersion::V1_8_9);
+        session.set_reading(State::Play);
+        let bytes: Vec<u8> = "ff3e3f0000002800000800ffffffb0e040000000010320f9c00960"
+            .as_bytes()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u8::from_str_radix(std::str::from_utf8(b).unwrap(), 16).unwrap())
+            .collect();
+        assert!(session.clientbound(14, bytes).unwrap().is_some());
+        assert_eq!(
+            session.take_legacy47_projectile_acceleration(8063),
+            Some([0.1, -0.2, 0.3])
+        );
+        assert_eq!(session.take_legacy47_projectile_acceleration(8063), None);
+        assert_eq!(
+            Session::new(ServerVersion::Current).take_legacy47_projectile_acceleration(8063),
+            None
+        );
     }
 }

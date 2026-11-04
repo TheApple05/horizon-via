@@ -1,5 +1,5 @@
 {
-  "horizon.multiplayer.horizon_via.title": "Horizon Via",
+  "horizon.multiplayer.horizon_via.title": "ViaHorizon",
   "horizon.multiplayer.horizon_via.search": "Search",
   "horizon.multiplayer.horizon_via.auto": "Auto Detect",
   "horizon.multiplayer.horizon_via.modern": "Modern",
@@ -545,5 +545,7 @@
   "horizon.extras.cosmetics.name_tags": "Name tags only",
   "horizon.multiplayer.horizon_via.tricky_trials": "Tricky Trials",
   "horizon.multiplayer.horizon_via.armored_paws": "Armored Paws",
-  "horizon.multiplayer.horizon_via.trails_tales": "Trails & Tales"
+  "horizon.multiplayer.horizon_via.trails_tales": "Trails & Tales",
+  "horizon.multiplayer.horizon_via.bountiful_update": "The Bountiful Update",
+  "horizon.multiplayer.horizon_via.unavailable_action": "That item or action is unavailable on this server version."
 }

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0 — experimental
+
+- Add an independent native Java 1.8.9 adapter with consumer-side configuration, old numeric items, connection-local terrain/light, entity and inventory state, effects, and dimension/reconnect handling.
+- Preserve signs, chest data and unchanged light during partial chunk updates. Accept ordinary null blank sign lines using the old sign-specific semantics.
+- Roll back item-cache mutations when an entire packet/action is rejected. Deliver local corrections while the server is quiet, preserving real timeout and transaction acknowledgement ordering.
+- Restore rejected creative edits synchronously and keep accepted old-style block predictions until authoritative server updates.
+- Preserve attribute meanings on 1.20.2 and resolve llama carpet colours by item name for each older registry.
+- Upgrade older placed block-entity data on both chunk delivery and updates, including banner patterns and skull profiles, while preserving vanilla data remainders.
+- Rename the visible product to ViaHorizon. Keep installed IDs/settings, crate names, source pins, licensing and historical release assets unchanged.
+
+Development validation passed protocol and public Session/Connection tests with strict protocol Clippy. The frozen native Windows development capture passed 20 real vanilla 1.8.9 gameplay gates plus 7 malformed-input/reconnect gates. The corresponding GitHub release notes record the separate exact-archive build, regression and privacy checks and their limits.
+
 ## 0.2.0 — experimental
 
 - Retargeted the independent native mod to official Horizon `d8edfbcd0f70aac5b41bab12b8bbf9cc3626de1f`.

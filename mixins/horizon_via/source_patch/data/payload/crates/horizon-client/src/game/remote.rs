@@ -18,6 +18,7 @@ use horizon_client::{
     hud::HudBatch,
     items::ItemStack,
     lan::data::{BIOME_REGISTRY, client_biomes},
+    light::LightTables,
     menu::Input,
     mobs::{Mob, MobType, Who},
     motion::{MotionWorld, PlayerMotion},
@@ -461,6 +462,9 @@ enum OwnProfile {
 pub(super) struct Remote {
     pub session: Session,
     pub brand: String,
+    /// Derived once after protocol negotiation and dropped with this connection.
+    /// Shared by inline and worker relighting through worker_context().
+    pub(super) legacy_light: Option<Arc<LightTables>>,
     /// This connection's configured feature flags, carried through reconfiguration.
     pub(super) features: Vec<String>,
     /// The server announced it runs mods' quiet commands.
@@ -909,9 +913,12 @@ impl Game<'_> {
             }
         };
         let player_type = super::perspective::player_type(&root);
+        // Negotiation runs in the background. This empty placeholder cannot
+        // borrow a previous connection's light policy; Login creates the real
+        // streamer after validating the negotiated connection-local table.
         let mut streaming = Streaming::new(
             Arc::new(NoTerrain),
-            self.worker_context(),
+            self.base_worker_context(),
             self.res.threads(),
         );
         streaming.remote = true;
@@ -994,6 +1001,7 @@ impl Game<'_> {
         self.remote = Some(Remote {
             session,
             brand: "unknown".into(),
+            legacy_light: None,
             features: vec!["minecraft:vanilla".into()],
             quiet_commands: false,
             mod_net: false,
@@ -1242,6 +1250,41 @@ impl Game<'_> {
             r.session.send(packet);
         }
     }
+    pub(super) fn is_legacy47(&self) -> bool {
+        self.remote.as_ref().is_some_and(|r| {
+            r.session.server_version() == horizon_protocol::adapter::ServerVersion::V1_8_9
+        })
+    }
+    fn send_checked(&self, packet: S) -> horizon_protocol::adapter::SendDisposition {
+        self.remote
+            .as_ref()
+            .map_or(horizon_protocol::adapter::SendDisposition::Consumed, |r| {
+                r.session.send_checked(packet)
+            })
+    }
+    fn send_for_prediction(&mut self, packet: S) -> bool {
+        if !self.is_legacy47() {
+            self.send(packet);
+            return true;
+        }
+        // A local inventory edit must be accepted/restored before the hand acts.
+        if self.creative && !self.send_creative_slots() {
+            return false;
+        }
+        self.send_checked(packet) == horizon_protocol::adapter::SendDisposition::Sent
+    }
+    fn retain_prediction(&mut self, pos: [i32; 3], before: BlockStateId, sequence: i32) {
+        if self.is_legacy47() {
+            return;
+        }
+        if let Some(r) = self.remote.as_mut() {
+            r.predictions
+                .entry(pos)
+                .and_modify(|p| p.0 = sequence)
+                .or_insert((sequence, before.0 as i32));
+        }
+    }
+
     fn next_sequence(&mut self) -> i32 {
         let r = self.remote.as_mut().expect("remote");
         r.sequence += 1;
@@ -1980,6 +2023,22 @@ impl Game<'_> {
                     self.offer_reconnect(retry);
                     return Ok(());
                 }
+                Event::Legacy47Projectile {
+                    packet,
+                    acceleration,
+                } => {
+                    let id = packet.id;
+                    self.handle_packet(C::AddEntity(*packet))?;
+                    if !super::remote_projectiles::remote_legacy47_fireball_acceleration(
+                        &mut self.creatures.projectiles,
+                        id,
+                        acceleration,
+                    ) {
+                        return Err(
+                            format!("legacy projectile{id} rejected fixed acceleration").into()
+                        );
+                    }
+                }
                 Event::Packet(packet) => self.handle_packet(*packet)?,
             }
             chunks += started.map_or(Duration::ZERO, |t| t.elapsed());
@@ -2056,6 +2115,35 @@ impl Game<'_> {
             self.command_block_server_suggestions(id, range, list);
         }
     }
+    /// Validate the negotiated protocol's light properties before Login may
+    /// create a world. Derivation cannot happen in join_server: the connection
+    /// thread may not have established its wire version there yet.
+    fn prepare_remote_lighting(&mut self) -> Result<()> {
+        let remote = self
+            .remote
+            .as_ref()
+            .ok_or("Login has no remote connection")?;
+        if remote.legacy_light.is_some() {
+            // Keep the same validated Arc across respawn, reconfiguration and
+            // resource-context reloads, even while the writer is shutting down.
+            return Ok(());
+        }
+        if remote.session.server_version() != horizon_protocol::adapter::ServerVersion::V1_8_9 {
+            return Ok(());
+        }
+        let properties = horizon_protocol::adapter::v1_8_9::lighting_properties();
+        if properties.is_empty() {
+            return Err("Protocol47 light properties are unavailable".into());
+        }
+        let light = Arc::new(self.pack.context.light.with_legacy_properties(properties)?);
+        let remote = self
+            .remote
+            .as_mut()
+            .ok_or("Remote connection disappeared during Login")?;
+        remote.legacy_light = Some(light);
+        Ok(())
+    }
+
     fn set_registries(&mut self, registries: Arc<Dynamic>) {
         // The server's biomes the game lacks (a world data pack's) join the
         // game's table, from the data it sent: colours, meshing and the
@@ -2451,6 +2539,13 @@ impl Game<'_> {
     /// predicted state until the server acknowledges the action; the server's state is
     /// remembered for then.
     fn server_block(&mut self, pos: [i32; 3], state: i32) {
+        if self.is_legacy47() {
+            if let Some(r) = self.remote.as_mut() {
+                r.predictions.remove(&pos);
+            }
+            self.set_block(pos, state);
+            return;
+        }
         if let Some((_, known)) = self
             .remote
             .as_mut()
@@ -2465,6 +2560,9 @@ impl Game<'_> {
     /// actions up to `sequence` are settled, so the blocks they predicted take the state the
     /// server gave them (a break the server refused comes back).
     fn end_predictions(&mut self, sequence: i32) {
+        if self.is_legacy47() {
+            return;
+        }
         let Some(r) = self.remote.as_mut() else {
             return;
         };
@@ -3061,6 +3159,15 @@ impl Game<'_> {
                 self.debug_charts.ping.log(delay);
             }
             C::Login(p) => {
+                if let Err(error) = self.prepare_remote_lighting() {
+                    // poll_remote errors otherwise only log a warning. Close
+                    // the connection and clear its queued world before returning
+                    // the error, so bad legacy facts never fall back to modern
+                    // lighting on a later frame.
+                    let reason = format!("ViaHorizon: cannot prepare legacy lighting: {error}");
+                    self.leave_server(Some(reason.clone()))?;
+                    return Err(reason.into());
+                }
                 self.test_highlights.clear();
                 self.forget_synced_recipes();
                 self.level.hardcore = p.hardcore;
@@ -3454,9 +3561,12 @@ impl Game<'_> {
             // the rope.
             C::SetEntityLink(p) => {
                 let me = self.remote.as_ref().map(|r| r.entity_id);
+                let legacy47 = self.remote.as_ref().is_some_and(|r| {
+                    r.session.server_version() == horizon_protocol::adapter::ServerVersion::V1_8_9
+                });
                 use horizon_client::mobs::leash::Holder;
                 let holder = match p.dest {
-                    0 => None,
+                    d if (legacy47 && d < 0) || (!legacy47 && d == 0) => None,
                     d if Some(d) == me => Some(Holder::Player),
                     d => match self.remote_knots.get(&(d as u32)) {
                         Some(&block) => Some(Holder::Knot(block)),
@@ -7009,9 +7119,10 @@ impl Game<'_> {
             let stacks = creative_sync_stacks(&self.inventory, &self.offhand, &self.armor);
             for (i, stack) in stacks.into_iter().enumerate() {
                 if stack != r.synced[i] {
-                    r.synced[i] = stack.clone();
-                    if !in_menu {
-                        creative_slots.push((creative_sync_slot(i), stack));
+                    if in_menu {
+                        r.synced[i] = stack;
+                    } else {
+                        creative_slots.push((i, creative_sync_slot(i), stack));
                     }
                 }
             }
@@ -7019,15 +7130,12 @@ impl Game<'_> {
         for packet in out {
             self.send(packet);
         }
-        for (slot, stack) in creative_slots {
-            let item = self.to_network(&stack);
-            self.send(S::SetCreativeModeSlot(play::SetCreativeModeSlot {
-                slot,
-                item,
-            }));
+        for (index, slot, stack) in creative_slots {
+            let before = self.remote.as_ref().unwrap().synced[index].clone();
+            self.send_creative_slot(index, slot, stack, before);
         }
     }
-    fn creative_stacks(&self) -> Vec<Option<ItemStack>> {
+    pub(super) fn creative_stacks(&self) -> Vec<Option<ItemStack>> {
         creative_sync_stacks(&self.inventory, &self.offhand, &self.armor)
     }
     /// `CreativeInventoryListener.slotChanged`: `handleCreativeModeItemAdd` for every slot the
@@ -7035,28 +7143,68 @@ impl Game<'_> {
     /// `broadcastChanges`, so a click's slots go out with the click, right behind a thrown
     /// stack, and not at the end of the tick: a slot update the server sends meanwhile (the
     /// pickup of what a held Q threw) can then never land on a change still unsent and undo it.
-    pub(super) fn send_creative_slots(&mut self) {
+    pub(super) fn send_creative_slots(&mut self) -> bool {
+        self.send_creative_edits_inner(None)
+    }
+    /// An explicit native operation owns this exact UI preimage, including unsent older changes.
+    pub(super) fn send_creative_edits(&mut self, before: &[Option<ItemStack>]) -> bool {
+        self.send_creative_edits_inner(Some(before))
+    }
+    fn send_creative_edits_inner(&mut self, before: Option<&[Option<ItemStack>]>) -> bool {
         if !self.creative {
-            return;
+            return true;
         }
         let stacks = self.creative_stacks();
-        let Some(r) = self.remote.as_mut() else {
-            return;
+        let Some(r) = self.remote.as_ref() else {
+            return false;
         };
-        let mut changed = Vec::new();
-        for (i, stack) in stacks.into_iter().enumerate() {
-            if stack != r.synced[i] {
-                r.synced[i] = stack.clone();
-                changed.push((creative_sync_slot(i), stack));
+        let baseline = before.unwrap_or(&r.synced);
+        let changed: Vec<_> = stacks
+            .into_iter()
+            .enumerate()
+            .filter(|(i, stack)| baseline.get(*i) != Some(stack))
+            .map(|(i, stack)| {
+                (
+                    i,
+                    creative_sync_slot(i),
+                    stack,
+                    baseline.get(i).cloned().flatten(),
+                )
+            })
+            .collect();
+        let mut accepted = true;
+        for (index, slot, stack, prior) in changed {
+            accepted &= self.send_creative_slot(index, slot, stack, prior);
+        }
+        accepted
+    }
+    fn send_creative_slot(
+        &mut self,
+        index: usize,
+        slot: i16,
+        stack: Option<ItemStack>,
+        before: Option<ItemStack>,
+    ) -> bool {
+        if self.remote.as_ref().is_none_or(|r| index >= r.synced.len()) {
+            return false;
+        }
+        let packet = S::SetCreativeModeSlot(play::SetCreativeModeSlot {
+            slot,
+            item: self.to_network(&stack),
+        });
+        if self.is_legacy47() {
+            if self.send_checked(packet) != horizon_protocol::adapter::SendDisposition::Sent {
+                self.set_menu_slot(0, i32::from(slot), before);
+                // Keep the old sent tracker: a genuinely older unsent edit may still need sending.
+                return false;
             }
+        } else {
+            self.send(packet);
         }
-        for (slot, stack) in changed {
-            let item = self.to_network(&stack);
-            self.send(S::SetCreativeModeSlot(play::SetCreativeModeSlot {
-                slot,
-                item,
-            }));
+        if let Some(r) = self.remote.as_mut() {
+            r.synced[index] = stack;
         }
+        true
     }
     /// Inventory as the server last described it.
     fn remote_synced(&mut self) {
@@ -7141,15 +7289,20 @@ impl Game<'_> {
             let seq = self.next_sequence();
             // DebugStickItem.canDestroyBlock never lets the client break the
             // block; the server only selects the property on this START.
-            if !debug_stick {
+            if !self.is_legacy47() && !debug_stick {
                 self.predict_break(hit.pos, state, seq);
             }
-            self.send(S::PlayerAction(play::PlayerAction {
+            if !self.send_for_prediction(S::PlayerAction(play::PlayerAction {
                 action: 0,
                 pos: hit.pos,
                 direction: face,
                 sequence: seq,
-            }));
+            })) {
+                return;
+            }
+            if self.is_legacy47() && !debug_stick {
+                self.predict_break(hit.pos, state, seq);
+            }
             if let Some(r) = self.remote.as_mut() {
                 r.destroy_delay = 5;
             }
@@ -7197,12 +7350,14 @@ impl Game<'_> {
                 }));
             }
             let seq = self.next_sequence();
-            self.send(S::PlayerAction(play::PlayerAction {
+            if !self.send_for_prediction(S::PlayerAction(play::PlayerAction {
                 action: 0,
                 pos: hit.pos,
                 direction: face,
                 sequence: seq,
-            }));
+            })) {
+                return;
+            }
             self.tutorial_destroy(state, 0.0);
             // startDestroyBlock: BlockState.attack on the client, so a redstone
             // ore's dust (RedStoneOreBlock.attack) comes before the break.
@@ -7239,15 +7394,20 @@ impl Game<'_> {
             let seq = self.next_sequence();
             // DebugStickItem.canDestroyBlock: the server selects the property
             // and sends the block update instead; never predict a break.
-            if !debug_stick {
+            if !self.is_legacy47() && !debug_stick {
                 self.predict_break(pos, state, seq);
             }
-            self.send(S::PlayerAction(play::PlayerAction {
+            if !self.send_for_prediction(S::PlayerAction(play::PlayerAction {
                 action: 3,
                 pos,
                 direction: face,
                 sequence: seq,
-            }));
+            })) {
+                return;
+            }
+            if self.is_legacy47() && !debug_stick {
+                self.predict_break(pos, state, seq);
+            }
             if let Some(r) = self.remote.as_mut() {
                 // `destroyBlockPos` remains the last target after the break;
                 // if that position is filled again before the next pick, a
@@ -7280,12 +7440,7 @@ impl Game<'_> {
     fn predict_break(&mut self, pos: [i32; 3], state: BlockStateId, sequence: i32) {
         self.tutorial_destroy(state, 1.0);
         // BlockStatePredictionHandler.retainKnownServerState.
-        if let Some(r) = self.remote.as_mut() {
-            r.predictions
-                .entry(pos)
-                .and_modify(|p| p.0 = sequence)
-                .or_insert((sequence, state.0 as i32));
-        }
+        self.retain_prediction(pos, state, sequence);
         // Block.playerWillDestroy's destroy event (particles and the break
         // sound), which BaseFireBlock skips: the server's extinguish sound
         // is all a player hears.
@@ -7557,7 +7712,7 @@ impl Game<'_> {
                 (hit.point[1] - f64::from(hit.pos[1])) as f32,
                 (hit.point[2] - f64::from(hit.pos[2])) as f32,
             ];
-            self.send(S::UseItemOn(play::UseItemOn {
+            if !self.send_for_prediction(S::UseItemOn(play::UseItemOn {
                 hand: hand_id(hand),
                 pos: hit.pos,
                 face: i32::from(face_direction(hit.face)),
@@ -7565,7 +7720,9 @@ impl Game<'_> {
                 inside: hit.face == [0; 3],
                 world_border: false,
                 sequence: seq,
-            }));
+            })) {
+                return true;
+            }
             // MultiPlayerGameMode.performUseItemOn: a spectator's use predicts
             // nothing and ends the click (CONSUME, no swing); the server opens
             // the block's menu.
@@ -7990,12 +8147,7 @@ impl Game<'_> {
         for &(p, state) in changes {
             let pos = [p.x, p.y, p.z];
             let before = self.world.block(p.x, p.y, p.z);
-            if let Some(r) = self.remote.as_mut() {
-                r.predictions
-                    .entry(pos)
-                    .and_modify(|e| e.0 = seq)
-                    .or_insert((seq, before.0 as i32));
-            }
+            self.retain_prediction(pos, before, seq);
             self.set_block(pos, state.0 as i32);
         }
     }
@@ -8109,12 +8261,14 @@ impl Game<'_> {
             return false;
         }
         let seq = self.next_sequence();
-        self.send(S::UseItem(play::UseItem {
+        if !self.send_for_prediction(S::UseItem(play::UseItem {
             hand: hand_id(hand),
             sequence: seq,
             yaw: self.yaw,
             pitch: self.pitch,
-        }));
+        })) {
+            return true;
+        }
         let Some(info) = self.items().get(&held.item).cloned() else {
             return false;
         };
@@ -10340,6 +10494,45 @@ impl horizon_client::interaction_input::InteractionWorld for RemoteInputWorld<'_
         self.0.remote_use();
     }
     fn pick(&mut self) {
+        if self.0.remote.as_ref().is_some_and(|r| {
+            r.session.server_version() == horizon_protocol::adapter::ServerVersion::V1_8_9
+        }) {
+            // This wire predates server-directed pick packets: its client selects/creates the
+            // clone stack locally, then synchronizes creative changes and the selected hotbar.
+            let entity = self.0.pick_entity_hit();
+            let stack = if let Some(entity) = entity {
+                if self.0.native_interaction(2, Hand::Main).is_some() {
+                    return;
+                }
+                entity.and_then(|id| self.0.entity_pick_result(id))
+            } else if let Some(hit) = self.0.pick() {
+                if self.0.native_interaction(2, Hand::Main).is_some() {
+                    return;
+                }
+                self.0
+                    .picked_stack(hit.pos, self.0.creative && self.0.has_control_down())
+            } else {
+                None
+            };
+            if let Some(stack) = stack {
+                let creative = self.0.creative;
+                // Old survival pick selects a matching hotbar entry; it cannot create/swap
+                // a stack into it via the modern server's pick request.
+                let count = if creative { 36 } else { 9 };
+                if horizon_client::pick_item::pick(
+                    &mut self.0.inventory[..count],
+                    &mut self.0.selected,
+                    &stack,
+                    creative,
+                ) {
+                    self.0.send_creative_slots();
+                    self.0.send(S::SetCarriedItem(play::SetCarriedItem {
+                        slot: self.0.selected as i16,
+                    }));
+                }
+            }
+            return;
+        }
         // Minecraft.pickBlockOrEntity: an entity before the block is asked
         // for (`handlePickItemFromEntity`), else the block.
         if let Some(entity) = self.0.pick_entity_hit() {

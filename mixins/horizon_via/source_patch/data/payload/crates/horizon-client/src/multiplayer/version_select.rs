@@ -62,6 +62,7 @@ fn details(version: Option<ServerVersion>) -> (&'static str, &'static str, &'sta
         Some(ServerVersion::V1_20_3) => ("trails_tales", "Dec 5, 2023", "decorated_pot"),
         Some(ServerVersion::V1_20_2) => ("trails_tales", "Sep 21, 2023", "brush"),
         Some(ServerVersion::V1_20_1) => ("trails_tales", "Jun 7, 2023", "cherry_sapling"),
+        Some(ServerVersion::V1_8_9) => ("bountiful_update", "", "slime_block"),
     }
 }
 
@@ -450,12 +451,13 @@ mod tests {
         );
         assert_eq!(version_name(Some(ServerVersion::V1_20_1)), "1.20–1.20.1");
         assert!(entries("1.19.4").is_empty());
-        assert!(entries("1.8.9").is_empty());
+        assert_eq!(entries("1.8.9"), vec![Some(ServerVersion::V1_8_9)]);
+        assert!(entries("1.7.10").is_empty());
     }
 
     #[test]
     fn every_picker_update_label_has_an_english_translation() {
-        assert_eq!(ServerVersion::ALL.len(), 15);
+        assert_eq!(ServerVersion::ALL.len(), 16);
         let translations: serde_json::Value =
             serde_json::from_str(include_str!("../../assets/horizon/lang/en_us.json")).unwrap();
         for version in ServerVersion::ALL {

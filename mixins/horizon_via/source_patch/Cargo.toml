@@ -1,10 +1,10 @@
 [package]
 name = "horizon-via-source-patch"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.90"
 license = "MIT"
-description = "Revision-pinned source overlays for the Horizon Via native mod"
+description = "Revision-pinned source overlays for the ViaHorizon native mod"
 build = "build.rs"
 
 [build-dependencies]

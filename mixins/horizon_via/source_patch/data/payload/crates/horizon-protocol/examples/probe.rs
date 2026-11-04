@@ -239,6 +239,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 play::Clientbound::AddEntity(p) => {
+                    // Consume adapter-owned spawn extras even though this decoder
+                    // probe deliberately runs no native projectile simulation.
+                    let _ = c.take_legacy47_projectile_acceleration(p.id);
                     let kind = builtin
                         .as_ref()
                         .and_then(|b| b.get("minecraft:entity_type")?.name(p.kind))

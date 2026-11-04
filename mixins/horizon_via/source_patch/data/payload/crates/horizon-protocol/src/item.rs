@@ -12,6 +12,7 @@ use std::sync::Arc;
 #[doc(hidden)]
 pub mod custom;
 mod hash;
+pub(crate) mod item47;
 mod skip;
 pub(crate) mod v1_20_3;
 pub(crate) mod v1_20_5;

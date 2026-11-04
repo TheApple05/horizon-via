@@ -1,28 +1,36 @@
-# Horizon Via
+# ViaHorizon
 
 Experimental cross-version multiplayer for **Horizon 26.3**, distributed as a separate native Horizon mod. Includes automatic server detection and a searchable version picker. This is an independent Rust implementation, unaffiliated with ViaVersion or ViaFabricPlus.
 
 ## Install
 
-Import the `.hnmod` from this project's releases through the Horizon launcher's native mod workflow. Native mods compile a game for the instance where they are installed. They are not Java `.jar` files and do not run in Fabric or Forge. Use the matching release's archive and source ZIP.
+Prepare an official **Horizon 26.3** instance first, then import the `.hnmod` from this project's releases through the Horizon launcher's native mod workflow. Native mods compile a game for the instance where they are installed. They are not Java `.jar` files and do not run in Fabric or Forge. Use the matching release's archive and source ZIP.
 
 For the command line, extract the matching source ZIP, then run the official launcher from the extracted folder:
 
 ```text
-horizon-launcher native-build . --instance "Horizon Via" --profile performance --trust-native-code
+horizon-launcher native-build . --instance "ViaHorizon" --profile performance --trust-native-code
 ```
 
 Install and prepare an official **Horizon 26.3** version in the launcher first, then create/select that instance and run the command. Native builds require an already prepared base game. The launcher handles its Rust toolchain. You need your own Minecraft Java Edition account and resources. The first native build downloads and compiles dependencies; later builds reuse them.
 
-Open **Multiplayer → Horizon Via** to choose a target version. **Auto Detect** reads the server's advertised protocol. Installing the mod enables its experimental adapters; set `HORIZON_OLDER_SERVERS=0` to turn them off for a process. Selection lasts for the current game session.
+Open **Multiplayer → ViaHorizon** to choose a target version. **Auto Detect** reads the server's advertised protocol. Installing the mod enables its experimental adapters; set `HORIZON_OLDER_SERVERS=0` to turn them off for a process. Selection lasts for the current game session.
 
 ## Compatibility
 
-Version 0.2.0 pins official Horizon source commit `d8edfbcd0f70aac5b41bab12b8bbf9cc3626de1f` and official horizon-mixins commit `e8cd0aa38cffef49cb2e088ef716baa107148c02`. It builds from the official game source, without a custom Horizon fork. Do not select “Build anyway” with a different source revision: this package deliberately refuses it.
+Version 0.3.0 pins official Horizon source commit `d8edfbcd0f70aac5b41bab12b8bbf9cc3626de1f` and official horizon-mixins commit `e8cd0aa38cffef49cb2e088ef716baa107148c02`. It builds from the official game source, without a custom Horizon fork. Do not select “Build anyway” with a different source revision: this package deliberately refuses it.
 
-Experimental target slices: **1.20–1.20.1, 1.20.2, 1.20.3–1.20.4, 1.20.5–1.20.6, 1.21–1.21.1, 1.21.2–1.21.3, 1.21.4, 1.21.5, 1.21.6, 1.21.7–1.21.8**. The pinned game already supplies adapters for **1.21.9–1.21.10, 1.21.11, 26.1–26.1.2 and 26.2**, plus its native 26.3 path. These cover 24 named Java releases across 15 protocol groups. See the corresponding GitHub release notes for the exact package's validation evidence. An adapter being listed is not a claim that every server or game behavior is verified.
+Experimental target slices: **1.8.9, 1.20–1.20.1, 1.20.2, 1.20.3–1.20.4, 1.20.5–1.20.6, 1.21–1.21.1, 1.21.2–1.21.3, 1.21.4, 1.21.5, 1.21.6, 1.21.7–1.21.8**. The pinned game already supplies adapters for **1.21.9–1.21.10, 1.21.11, 26.1–26.1.2 and 26.2**, plus its native 26.3 path. These cover 25 named Java releases across 16 protocol groups, including the native 26.3 group. See the corresponding GitHub release notes for the exact package's validation evidence. An adapter being listed is not a claim that every server or game behavior is verified.
 
-Online authentication across all targets, modified servers, full playthroughs and complete old movement/combat behavior remain unverified. Native legacy item/entity hover presentation and reconstructing some edited potion contents for transmission remain incomplete. Older releases, snapshots, Classic/Alpha/Beta and Bedrock are unsupported. Some custom item/recipe/registry layouts remain unsupported. This is an experimental release, not complete ViaFabricPlus parity.
+Online authentication across all targets, modified servers, full playthroughs and complete old movement/combat behavior remain unverified. Native legacy item/entity hover presentation and reconstructing some edited potion contents for transmission remain incomplete. Versions 1.9 through 1.19 are not included. Other older releases, snapshots, Classic/Alpha/Beta and Bedrock are unsupported. Some custom item/recipe/registry layouts remain unsupported. This is an experimental release, not complete ViaFabricPlus parity.
+
+## Java 1.8.9
+
+The native protocol 47 adapter covers login, world/chunk/light conversion, numeric items and metadata, inventory transactions, chat, entities, effects and dimension changes. It uses Rust throughout; there is no Java proxy helper at runtime.
+
+Development acceptance passed on a real local vanilla 1.8.9 server with the native Windows client: 20 gameplay gates and 7 controlled malformed-input/reconnect gates, with zero normal decoding or untranslated-metadata diagnostics. This covered partial-chunk preservation, exact item variants/NBT, rejected chest transactions, creative pick, movement, block interactions, entities, lighting, Nether travel and reconnect. Source and binary hashes were frozen for those runs. The matching release notes record the separate exact-archive checks.
+
+This is experimental. Complete old movement/combat and vehicle-control parity are unfinished. Footprint and snow-shovel particles are recognized cosmetic omissions, and some edited item/menu paths remain unsupported. Newer items which cannot be represented on the old server are rejected locally and their inventory changes are restored.
 
 ## How this native mod builds
 

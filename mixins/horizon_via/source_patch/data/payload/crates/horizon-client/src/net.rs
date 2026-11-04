@@ -57,6 +57,12 @@ pub enum Event {
         name: String,
     },
     Packet(Box<play::Clientbound>),
+    /// One indivisible game-thread operation: spawn, then install old fixed-vector physics.
+    /// Produced only from ConnReader's trusted adapter state, never from server custom payloads.
+    Legacy47Projectile {
+        packet: Box<play::AddEntity>,
+        acceleration: [f64; 3],
+    },
     /// A packet that failed to decode (skipped, like vanilla's skippable packets).
     DecodeError(String),
     /// The server sent us back to configuration (`ClientboundStartConfigurationPacket`):
@@ -305,6 +311,31 @@ impl Session {
             w.shutdown();
         }
     }
+    /// Trusted local acceptance for legacy47 edits; no reader packets are drained here.
+    pub fn send_checked(
+        &self,
+        packet: play::Serverbound,
+    ) -> horizon_protocol::adapter::SendDisposition {
+        use horizon_protocol::adapter::SendDisposition as D;
+        if self.debug {
+            eprintln!("[net] -> {packet:?}");
+        }
+        let mut writer = self.writer.lock().unwrap();
+        if self.configuring.load(Ordering::Relaxed) {
+            return D::Consumed;
+        }
+        let Some(writer) = writer.as_mut() else {
+            return D::Consumed;
+        };
+        match writer.send_checked(&packet.encode()) {
+            Ok(outcome) => outcome,
+            Err(_) => {
+                writer.shutdown();
+                D::Consumed
+            }
+        }
+    }
+
     /// Far terrain the server samples, as it offered (`Event::FarTerrain`):
     /// biomes named by this client's indices, block states below `states`.
     pub fn far_terrain(
@@ -576,10 +607,10 @@ fn connect_tcp(
     Ok((c, host, port))
 }
 
-/// Installing Horizon Via enables its experimental older-server adapters.
+/// Installing ViaHorizon enables its experimental older-server adapters.
 /// `HORIZON_OLDER_SERVERS=0` explicitly disables them for this process.
 pub fn older_servers_enabled() -> bool {
-    // Installing Horizon Via is the opt-in. Keep an explicit process-level off switch.
+    // Installing ViaHorizon is the opt-in. Keep an explicit process-level off switch.
     std::env::var_os("HORIZON_OLDER_SERVERS").is_none_or(|value| value == "1")
 }
 
@@ -921,6 +952,18 @@ fn receive_play(
             // A far tile, straight to the sampler waiting for it.
             play::Clientbound::CustomPayload(p) if p.channel == crate::lod_net::CHANNEL => {
                 far.deliver(p.data);
+            }
+            play::Clientbound::AddEntity(packet) => {
+                let event = match reader.take_legacy47_projectile_acceleration(packet.id) {
+                    Some(acceleration) => Event::Legacy47Projectile {
+                        packet: Box::new(packet),
+                        acceleration,
+                    },
+                    None => Event::Packet(Box::new(play::Clientbound::AddEntity(packet))),
+                };
+                if send.send(event).is_err() {
+                    return Ok(Reason::plain("Disconnected"));
+                }
             }
             other => {
                 if send.send(Event::Packet(Box::new(other))).is_err() {

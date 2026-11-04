@@ -79,7 +79,9 @@ def main() -> None:
     metadata, files = validate()
     destination = ROOT / 'dist'
     destination.mkdir(exist_ok=True)
-    stem = f"horizon-via-{metadata['version']}"
+    # Historical releases retain their original asset names.
+    prefix = 'horizon-via' if metadata['version'] in ('0.1.0', '0.2.0') else 'viahorizon'
+    stem = f"{prefix}-{metadata['version']}"
     mod = destination / f'{stem}.hnmod'
     archive(mod, [(p.relative_to(ROOT).as_posix(), p) for p in files])
     root_files = ['README.md', 'LICENSE', 'PROVENANCE.md', 'CHANGELOG.md', '.gitignore', 'horizon-native.json']
