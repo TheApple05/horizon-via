@@ -34,6 +34,11 @@ name = "nethernet_login"
 path = "tests/nethernet_login.rs"
 required-features = ["nethernet"]
 
+[[test]]
+name = "startup"
+path = "tests/startup.rs"
+required-features = ["nethernet"]
+
 [patch.crates-io]
 rtc = { git = "https://github.com/cinnabar-mc/rtc", rev = "96e92b5ffddd5d0492fd1948ce9a61657f2786df" }
 rtc-crypto = { git = "https://github.com/cinnabar-mc/rtc", rev = "96e92b5ffddd5d0492fd1948ce9a61657f2786df" }

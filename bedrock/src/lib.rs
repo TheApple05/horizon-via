@@ -9,3 +9,6 @@ pub mod storage;
 
 #[cfg(feature = "nethernet")]
 pub mod negotiation;
+
+#[cfg(feature = "nethernet")]
+pub mod startup;

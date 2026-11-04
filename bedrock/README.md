@@ -22,8 +22,24 @@ already admitted caller-owned transport. It retains the same connection and
 proof key, builds metadata after compression settings, bounds input and pack
 budgets, disables blob-cache claims, and retires the same connection on setup
 failure. Callers must bind transport admission to that same key. This layer
-does not discover/connect to servers, acquire credentials, follow transfers,
-download resource packs, initialize a player or translate gameplay.
+does not discover/connect to servers, acquire credentials, follow transfers or
+translate gameplay.
+
+`startup` consumes that Login boundary with its original absolute deadline.
+Nonempty resource-pack offers wait for an explicit caller decision while late
+verified key exchanges are serviced. Accepted packs use bounded in-band transfer
+or caller-verified preloads; the same original protocol owners retain the bytes,
+completion notifications, early stack and final acknowledgement. The raw wire
+adapter preserves unknown and unrelated original frames in the existing bounded
+FIFO. Archives are handed off as opaque bytes; validation and application remain
+with the host. No archive is extracted or applied by this layer.
+
+Network readiness retains the first StartGame and item registry. It permits the
+host to read original queued world frames but sends no player-initialization
+acknowledgement until the host's presentation future succeeds. That consuming
+transition sends once on the original connection. Failed presentation, setup
+errors, cancellation and timeouts retire that same owner. These library states
+are not a working Horizon world adapter or evidence of rendered gameplay.
 
 `storage` decodes bounded version-9 network subchunks and full-height biome
 storages, preserving separate layers and following-payload offsets. It admits
@@ -64,13 +80,18 @@ $env:CARGO_TARGET_DIR = '<private isolated build directory>'
 cargo test --locked --manifest-path bedrock/Cargo.toml -j 2 --lib
 cargo check --locked --manifest-path bedrock/Cargo.toml -j 2 --features nethernet --lib
 cargo test --locked --manifest-path bedrock/Cargo.toml -j 2 --features nethernet --test nethernet_login -- --test-threads=1
+cargo test --locked --manifest-path bedrock/Cargo.toml -j 2 --features nethernet --test startup -- --test-threads=1
 cargo run --locked --manifest-path bedrock/Cargo.toml -j 2 --example check_native_facts -- '<extracted native-facts.json>'
 python -m unittest discover -s tools/bedrock -p test_native_facts.py
 ```
 
 The signed loopback tests use ephemeral synthetic identities and local listeners.
-They check offer and packless Login boundaries, FIFO preservation, timeout and
-cancellation cleanup. These are parser/library/fixture checks. Owned-server interoperability,
-resource-packs/startup, chunk/light/biome rendering, movement, entities,
+They check offer and packless Login boundaries; empty and explicitly admitted
+opaque pack transfer/preloads; early-stack and unknown-frame FIFO preservation;
+late verified key ACK ordering and invalid-first-token rejection; presentation
+gating; timeout, cancellation and same-owner cleanup. Opaque synthetic pack bytes
+are never treated as valid game assets. These are parser/library/fixture checks.
+Owned-server interoperability, real resource-pack application, actual Horizon
+startup, chunk/light/biome rendering, movement, entities,
 inventory, dimensions, reconnect and account-backed joining still require
 implementation and integration tests before any support claim or mod release.

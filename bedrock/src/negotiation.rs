@@ -34,6 +34,7 @@ pub struct OfflineProfile {
 pub struct LoginBoundary {
     pub connection: Connection,
     pub packs: Option<ClientPackOffer>,
+    pub(crate) setup_deadline: Instant,
 }
 
 impl LoginBoundary {
@@ -43,7 +44,7 @@ impl LoginBoundary {
     }
 }
 
-async fn retire(connection: &mut Connection, budget: Duration) {
+pub(crate) async fn retire(connection: &mut Connection, budget: Duration) {
     let cutoff = Instant::now() + budget;
     connection.retire_send(cutoff.into_std());
     let _ = timeout_at(cutoff, connection.settle_send()).await;
@@ -126,7 +127,11 @@ pub async fn login_offline(
             ))
         });
     match result {
-        Ok(packs) => Ok(LoginBoundary { connection, packs }),
+        Ok(packs) => Ok(LoginBoundary {
+            connection,
+            packs,
+            setup_deadline,
+        }),
         Err(error) => {
             retire(&mut connection, Duration::from_secs(2)).await;
             Err(error)
