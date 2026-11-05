@@ -1116,6 +1116,7 @@ dependencies = [
  "bedrock-client-tokio",
  "bedrock-net",
  "bedrock-protocol-contract-1-26-60",
+ "nethernet-tokio",
  "p384",
  "serde",
  "serde_json",

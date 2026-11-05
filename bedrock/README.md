@@ -22,13 +22,25 @@ runtime download. The full CC0 dedication and version/hash provenance are
 included with it. Host semantic rules and custom server identities remain
 separate responsibilities.
 
-The optional `nethernet` feature adds settings and offline Login glue over an
-already admitted caller-owned transport. It retains the same connection and
+The optional `nethernet` feature adds an explicit HTTP dial path and settings /
+offline Login glue over an already admitted caller-owned transport. The HTTP
+caller supplies the selected endpoint and server trust policy; the backend
+installs the same proof key in the HTTP identity and Login, and binds Login's
+`ServerAddress` to that endpoint. Dial and Login share one absolute deadline.
+It retains the same connection and
 proof key, builds metadata after compression settings, bounds input and pack
 budgets, disables blob-cache claims, and retires the same connection on setup
-failure. Callers must bind transport admission to that same key. This layer
-does not discover/connect to servers, acquire credentials, follow transfers or
+failure. Callers of the transport-only entry point must bind admission to that
+same key. This layer does not discover servers, acquire credentials, follow transfers or
 translate gameplay.
+
+`session` keeps that native connection on a dedicated Rust network thread for a
+synchronous host. Bounded channels carry the first native startup definitions,
+original raw frames and an explicit presentation command. A pending receive
+allows presentation and cancellation through; initialization is acknowledged
+once, and native play sends require that transition. Nonempty resource packs
+are refused until the host can admit and apply them. This is a host integration
+API; Horizon's Java session, game world and Connect screen do not use it yet.
 
 `startup` consumes that Login boundary with its original absolute deadline.
 Nonempty resource-pack offers wait for an explicit caller decision while late
@@ -117,7 +129,7 @@ including their applicable complete license texts and attributions. Those
 package grants are permissive; mixed AND obligations retain their full notices.
 This is a package-level notice review, not a full per-file or binary-provenance
 audit. The index binds combined lock SHA-256
-`705f20b07c680348250d59a026e03a66b49d8ef6d9de565397af46680e04ba87`;
+`491eb5ce3898fbdf6c4bae956fdaccece58a6fd47df9705a8fdddb38e9c4a2f4`;
 it does not claim to describe every version in the separate development lock.
 No compiler, import-library binary, schema, capture or game asset is included
 in the legal-only notice bundle.

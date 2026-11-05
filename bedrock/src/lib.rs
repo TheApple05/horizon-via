@@ -15,3 +15,6 @@ pub mod negotiation;
 
 #[cfg(feature = "nethernet")]
 pub mod startup;
+
+#[cfg(feature = "nethernet")]
+pub mod session;

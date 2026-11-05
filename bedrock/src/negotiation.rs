@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Integration follows Cinnabar's MIT client guide; retained notices are in notices/.
 
-//! Offline fixture Login over an already admitted caller-owned NetherNet transport.
+//! Explicit offline HTTP connection or Login on a caller-owned NetherNet transport.
 //! This does not discover servers, authenticate an account or initialize gameplay.
 
 use crate::limits::server_receive_limits;
@@ -21,6 +21,86 @@ use std::{
     time::{Duration, SystemTime},
 };
 use tokio::time::{Instant, timeout_at};
+
+/// The caller supplies the exact URL, HTTP policy and server trust policy.
+/// Identity is installed from the same proof key used for the following Login.
+pub struct OfflineHttp {
+    pub signaling: nethernet_tokio::HttpSignaling,
+    pub endpoint: String,
+    pub config: nethernet_tokio::ConnectionConfig,
+}
+
+/// Dial an explicit HTTP-signaled endpoint and perform settings/offline Login
+/// under one absolute deadline. No transport fallback or account credentials.
+pub async fn connect_offline_http(
+    request: OfflineHttp,
+    key: Arc<SigningKey>,
+    profile: OfflineProfile,
+    setup_deadline: Instant,
+    metadata: impl FnOnce(&Connection) -> io::Result<Box<RawValue>>,
+    observe: &mut (impl FnMut(Observation<'_>) + Send),
+) -> io::Result<LoginBoundary> {
+    validate_profile(&profile)?;
+    let OfflineHttp {
+        signaling,
+        endpoint,
+        mut config,
+    } = request;
+    if config.identity.is_some() || config.server_trust.is_none() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "offline HTTP requires explicit server trust and no replacement proof identity",
+        ));
+    }
+    let lifetime = setup_deadline.saturating_duration_since(Instant::now());
+    if lifetime.is_zero() {
+        return Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            "Bedrock setup deadline elapsed",
+        ));
+    }
+    config.identity = Some(Arc::new(
+        nethernet_tokio::SelfSignedIdentity::from_key(Arc::clone(&key), profile.now, lifetime)
+            .map_err(io::Error::other)?,
+    ));
+    let client = bedrock_client_tokio::connect::http::connect(
+        signaling,
+        endpoint.clone(),
+        config,
+        setup_deadline,
+        None,
+    )
+    .await?;
+    login_offline(
+        Transport::from_http(client),
+        key,
+        profile,
+        setup_deadline,
+        |connection| {
+            let raw = metadata(connection)?;
+            let mut claims = bedrock_net::login::client_data::RawClientData::from_raw(&raw)?;
+            claims.insert("ServerAddress", endpoint.into())?;
+            serde_json::value::to_raw_value(&claims).map_err(io::Error::other)
+        },
+        observe,
+    )
+    .await
+}
+
+fn validate_profile(profile: &OfflineProfile) -> io::Result<()> {
+    if profile.display_name.is_empty()
+        || profile.display_name.len() > 64
+        || uuid::Uuid::parse_str(&profile.uuid).is_err()
+        || profile.display_name.chars().any(char::is_control)
+    {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "invalid explicit offline profile",
+        ))
+    } else {
+        Ok(())
+    }
+}
 
 /// Explicit fake/offline identity. Its account-only identity fields remain empty.
 pub struct OfflineProfile {
@@ -73,16 +153,7 @@ pub async fn login_offline(
     let mut connection =
         Connection::new(transport, limits, server_receive_limits(), 8 * 1024 * 1024);
     let attempt = async {
-        if profile.display_name.is_empty()
-            || profile.display_name.len() > 64
-            || uuid::Uuid::parse_str(&profile.uuid).is_err()
-            || profile.display_name.chars().any(char::is_control)
-        {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "invalid explicit offline profile",
-            ));
-        }
+        validate_profile(&profile)?;
         let configured = ClientHandshake::new(
             key,
             HandshakeOptions {

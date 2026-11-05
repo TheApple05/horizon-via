@@ -1022,3 +1022,280 @@ async fn late_exchange_case(during_acquire: bool, valid: bool) {
     .await
     .expect("late exchange fixture exceeded overall deadline");
 }
+
+#[tokio::test]
+async fn native_session_presentation_and_disconnect_preempt_silent_receive() {
+    native_session_case(false).await;
+    native_session_case(true).await;
+}
+
+async fn native_session_case(full_events: bool) {
+    use horizon_bedrock::{
+        negotiation::OfflineHttp,
+        session::{Event, Request, Session},
+    };
+    use nethernet_tokio::{
+        ClientIceConfig, ConnectionConfig, HttpServerConfig, HttpSignaling, HttpSignalingServer,
+        NetherServer, ServerIceConfig, ServerIdentity, TokenTrust,
+    };
+
+    async fn next_event(session: &mut Session, deadline: Instant) -> Event {
+        tokio::time::timeout_at(deadline, async {
+            loop {
+                match session.poll() {
+                    Ok(event) => return event,
+                    Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {
+                        tokio::time::sleep(Duration::from_millis(1)).await;
+                    }
+                    Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
+                        panic!("native session event channel closed before its event");
+                    }
+                }
+            }
+        })
+        .await
+        .expect("native session event exceeded fixture deadline")
+    }
+
+    timeout(Duration::from_secs(30), async {
+        let key = Arc::new(SigningKey::generate());
+        let server_key = Arc::new(SigningKey::generate());
+        let now = SystemTime::now();
+        let signaling = Arc::new(
+            HttpSignalingServer::bind("127.0.0.1:0".parse().unwrap(), HttpServerConfig::default())
+                .await
+                .unwrap(),
+        );
+        let mut listener = NetherServer::bind_with(
+            Arc::clone(&signaling),
+            ConnectionConfig {
+                identity: Some(Arc::new(
+                    ServerIdentity::from_key(
+                        (*server_key).clone(),
+                        "horizon-session-loopback",
+                        now,
+                        Some(Duration::from_secs(30)),
+                    )
+                    .unwrap(),
+                )),
+                // Explicit local synthetic fixture trust; never account authentication.
+                token_trust: Some(TokenTrust::Any),
+                server_ice: Some(ServerIceConfig {
+                    bind_addr: "127.0.0.1:0".parse().unwrap(),
+                    ice: Default::default(),
+                    turn_streams: Vec::new(),
+                    turn_tls: None,
+                }),
+                attempts: 1,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(15);
+        let mut session = Session::connect(Request {
+            http: OfflineHttp {
+                signaling: HttpSignaling::new("horizon-session-loopback-client".into()).unwrap(),
+                endpoint: format!("http://{}", signaling.local_addr()),
+                config: ConnectionConfig {
+                    server_trust: Some(TokenTrust::Any),
+                    client_ice: Some(ClientIceConfig {
+                        bind_addr: Some("127.0.0.1:0".parse().unwrap()),
+                        ice: Default::default(),
+                        turn_streams: Vec::new(),
+                        turn_tls: None,
+                    }),
+                    attempts: 1,
+                    ..Default::default()
+                },
+            },
+            key: Arc::clone(&key),
+            profile: profile(),
+            deadline: deadline.into_std(),
+            radius: radius(),
+            metadata: Box::new(|_| metadata()),
+        })
+        .unwrap();
+        let (silent_tx, silent_rx) = oneshot::channel();
+        let (initialized_tx, initialized_rx) = oneshot::channel();
+        let client_task = async {
+            if full_events {
+                // Never poll the event receiver in this case. NetworkReady
+                // occupies slot 1 before the actor admits host commands.
+                silent_rx.await.unwrap();
+                // Synthetic fixture callback only, not real world presentation.
+                session.presented().unwrap();
+                let mut request = radius();
+                request.chunk_radius = wire::ZigZag32(9);
+                session.send(request.into()).unwrap();
+                // The server sees radius 9 only after the actor has enqueued
+                // Initialized into slot 2. This is the full-queue barrier.
+                initialized_rx.await.unwrap();
+                session.disconnect();
+                timeout(Duration::from_secs(5), async {
+                    while !session.is_finished() {
+                        tokio::time::sleep(Duration::from_millis(1)).await;
+                    }
+                })
+                .await
+                .expect("full unpolled event queue retained the disconnected worker");
+                // Retain the receiver until worker completion has been proved.
+                drop(session);
+                return;
+            }
+            let Event::NetworkReady(data) = next_event(&mut session, deadline).await else {
+                panic!("native session did not emit NetworkReady");
+            };
+            assert_eq!(data.start_game.runtime_id.0, 73);
+            assert!(data.item_registry.item_data.is_empty());
+            for expected in [11, 22] {
+                session.next_frame().unwrap();
+                let Event::Frame(raw) = next_event(&mut session, deadline).await else {
+                    panic!("original time frame missing from native session");
+                };
+                assert_time(&raw, expected);
+            }
+            silent_rx.await.unwrap();
+            session.next_frame().unwrap();
+            assert!(
+                timeout(
+                    Duration::from_millis(80),
+                    next_event(&mut session, deadline)
+                )
+                .await
+                .is_err(),
+                "silent peer unexpectedly supplied a frame or initialized early"
+            );
+            // Synthetic host completion only; this does not present a real world.
+            session.presented().unwrap();
+            assert!(matches!(
+                timeout(Duration::from_secs(2), next_event(&mut session, deadline))
+                    .await
+                    .expect("presentation did not preempt the pending receive"),
+                Event::Initialized
+            ));
+            initialized_rx.await.unwrap();
+            session.next_frame().unwrap();
+            assert!(
+                timeout(
+                    Duration::from_millis(80),
+                    next_event(&mut session, deadline)
+                )
+                .await
+                .is_err(),
+                "post-init silent peer unexpectedly supplied a frame or duplicate event"
+            );
+            session.disconnect();
+            let Event::Disconnected(error) =
+                timeout(Duration::from_secs(3), next_event(&mut session, deadline))
+                    .await
+                    .expect("disconnect did not preempt the pending receive")
+            else {
+                panic!("disconnect did not report cancellation");
+            };
+            assert_eq!(error.kind(), io::ErrorKind::Interrupted);
+            drop(session);
+        };
+        let server_task = async {
+            let accepted = listener.accept().await.unwrap();
+            let peer_key = accepted
+                .session
+                .player()
+                .await
+                .unwrap()
+                .client_public_key()
+                .unwrap();
+            assert_eq!(peer_key, *key.verifying_key());
+            let (mut wire, default_handshake) = AcceptingConnection::from_nether(
+                accepted,
+                Arc::clone(&server_key),
+                ServerHandshakeOptions::default(),
+                8 * 1024 * 1024,
+                deadline.into_std(),
+            )
+            .await
+            .unwrap();
+            drop(default_handshake);
+            let server = ServerHandshake::new_offline(
+                Arc::clone(&server_key),
+                Some(peer_key),
+                ServerHandshakeOptions::default(),
+                deadline.into_std(),
+                Instant::now().into_std(),
+            )
+            .unwrap();
+            admit(&mut wire, server, deadline, start()).await;
+            send(
+                &mut wire,
+                vec![
+                    packets::ItemRegistry::default().into(),
+                    packets::PlayStatus {
+                        status: PlayStatusType::PlayerSpawn,
+                    }
+                    .into(),
+                ],
+                deadline,
+            )
+            .await;
+            let packets::Packet::RequestChunkRadius(request) =
+                wire.receive(deadline.into_std()).await.unwrap()
+            else {
+                panic!("native session radius request missing");
+            };
+            assert_eq!(request.chunk_radius.0, 8);
+            if !full_events {
+                assert!(
+                    timeout(Duration::from_millis(80), wire.receive(deadline.into_std()))
+                        .await
+                        .is_err(),
+                    "initialization preceded the synthetic host presentation callback"
+                );
+            }
+            silent_tx.send(()).unwrap();
+            let packets::Packet::SetLocalPlayerAsInitialized(initialized) =
+                wire.receive(deadline.into_std()).await.unwrap()
+            else {
+                panic!("presentation did not emit the real initialization packet");
+            };
+            assert_eq!(initialized.player_id.0, 73);
+            if full_events {
+                let packets::Packet::RequestChunkRadius(request) =
+                    wire.receive(deadline.into_std()).await.unwrap()
+                else {
+                    panic!("full event queue barrier radius missing or duplicate init escaped");
+                };
+                assert_eq!(request.chunk_radius.0, 9);
+            } else {
+                assert!(
+                    timeout(Duration::from_millis(80), wire.receive(deadline.into_std()))
+                        .await
+                        .is_err(),
+                    "duplicate initialization or radius packet escaped"
+                );
+            }
+            initialized_tx.send(()).unwrap();
+            assert_eq!(
+                wire.receive(deadline.into_std()).await.unwrap_err().kind(),
+                io::ErrorKind::UnexpectedEof,
+                "disconnect did not close the original association, or extra packets escaped"
+            );
+            wire
+        };
+        let ((), wire) = tokio::join!(client_task, server_task);
+        let mut retired = wire.begin_close();
+        retired
+            .finish_close((Instant::now() + Duration::from_secs(2)).into_std())
+            .await
+            .unwrap();
+        drop(retired);
+        listener.close().await.unwrap();
+        drop(listener);
+        Arc::try_unwrap(signaling)
+            .ok()
+            .expect("HTTP signaling owner leaked")
+            .shutdown()
+            .await;
+    })
+    .await
+    .expect("native session loopback fixture exceeded its overall deadline");
+}

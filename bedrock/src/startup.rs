@@ -516,6 +516,20 @@ impl NetworkReady {
         Ok((self, raw))
     }
 
+    // The native session actor keeps this owner alive while selecting host
+    // commands beside a pending receive. next_raw only removes a frame after
+    // its final await; cancelling a pending read retains every queued sibling.
+    pub(crate) async fn receive_frame(&mut self) -> io::Result<Vec<u8>> {
+        let result = timeout_at(self.owner.deadline, async {
+            check_deadline(self.owner.deadline)?;
+            self.owner.connection.next_raw().await
+        })
+        .await;
+        let raw = finish(&mut self.owner, result).await?;
+        self.owner.connection.finish_current();
+        Ok(raw.as_ref().to_vec())
+    }
+
     /// The host must complete this future only when its actual presentation is
     /// ready. Network readiness alone cannot send SetLocalPlayerAsInitialized.
     /// Failure/cancellation retains no reusable initialization capability.

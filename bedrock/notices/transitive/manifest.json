@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "scope": "Publication legal-only notice bundle for 164 added third-party package identities, one owned bridge and adapted reference attributions. Package-level notice retention; not a full per-file or binary-provenance audit.",
-  "combined_lock_sha256": "705f20b07c680348250d59a026e03a66b49d8ef6d9de565397af46680e04ba87",
+  "combined_lock_sha256": "491eb5ce3898fbdf6c4bae956fdaccece58a6fd47df9705a8fdddb38e9c4a2f4",
   "third_party_packages": [
     {
       "name": "aes",

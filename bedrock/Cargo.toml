@@ -12,7 +12,7 @@ description = "Unreleased native Bedrock backend foundation for Horizon"
 
 [features]
 default = []
-nethernet = ["dep:bedrock-client", "dep:bedrock-client-tokio", "dep:bedrock-net", "dep:p384", "dep:tokio"]
+nethernet = ["dep:bedrock-client", "dep:bedrock-client-tokio", "dep:bedrock-net", "dep:nethernet-tokio", "dep:p384", "dep:tokio"]
 
 [dependencies]
 bedrock-protocol = { package = "bedrock-protocol-contract-1-26-60", git = "https://github.com/cinnabar-mc/protocolgen", rev = "9eed056998235e4c01e0f3befabed651021dea77" }
@@ -23,6 +23,7 @@ uuid = "1"
 bedrock-net = { git = "https://github.com/cinnabar-mc/bedrock-net", rev = "9126e2b46a8987ad20889e535eb98850d869109d", optional = true }
 bedrock-client = { git = "https://github.com/cinnabar-mc/bedrock-net", rev = "9126e2b46a8987ad20889e535eb98850d869109d", optional = true }
 bedrock-client-tokio = { git = "https://github.com/cinnabar-mc/bedrock-net", rev = "9126e2b46a8987ad20889e535eb98850d869109d", features = ["nethernet"], optional = true }
+nethernet-tokio = { git = "https://github.com/cinnabar-mc/nethernet", rev = "22bd8877a1a75de41701c817309a25f9b0c707c6", optional = true }
 p384 = { version = "0.14", default-features = false, features = ["alloc", "ecdsa", "ecdh", "pkcs8"], optional = true }
 tokio = { version = "1", features = ["rt", "time", "macros", "sync"], optional = true }
 
