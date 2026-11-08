@@ -468,7 +468,7 @@ impl ConnReader {
     pub fn read_raw(&mut self, len: usize) -> Result<Vec<u8>> {
         let mut out = vec![0u8; len];
         self.stream.read_exact(&mut out)?;
-        if len != 0 && self.is_legacy47() {
+        if len != 0 && self.uses_native_bridge() {
             let mut timing = self.read_timing.lock().unwrap();
             timing.last_network_progress = Instant::now();
             timing.restart_after_timeout = false;
@@ -477,7 +477,7 @@ impl ConnReader {
     }
     /// Block until a whole packet arrives: (id, payload).
     pub fn recv(&mut self) -> Result<(i32, Vec<u8>)> {
-        if self.is_legacy47() {
+        if self.uses_native_bridge() {
             {
                 let mut timing = self.read_timing.lock().unwrap();
                 if timing.restart_after_timeout {
@@ -485,7 +485,7 @@ impl ConnReader {
                     timing.restart_after_timeout = false;
                 }
             }
-            let result = self.recv_legacy47();
+            let result = self.recv_native_bridge();
             // A local queue delivery or an error must not leave short polling
             // timeouts installed for read_raw or a later connection mode.
             let requested = self.read_timing.lock().unwrap().requested;
@@ -525,13 +525,13 @@ impl ConnReader {
         }
     }
 
-    fn is_legacy47(&self) -> bool {
+    fn uses_native_bridge(&self) -> bool {
         self.adapter
             .as_ref()
-            .is_some_and(|a| a.version == crate::adapter::ServerVersion::V1_8_9)
+            .is_some_and(|a| a.version.uses_native_bridge())
     }
 
-    fn recv_legacy47(&mut self) -> Result<(i32, Vec<u8>)> {
+    fn recv_native_bridge(&mut self) -> Result<(i32, Vec<u8>)> {
         const POLL: Duration = Duration::from_millis(20);
         loop {
             let slice = {
@@ -687,7 +687,7 @@ impl ConnReader {
             c.decrypt(data);
         }
         self.end += n;
-        if n != 0 && self.is_legacy47() {
+        if n != 0 && self.uses_native_bridge() {
             let mut timing = self.read_timing.lock().unwrap();
             timing.last_network_progress = Instant::now();
             timing.restart_after_timeout = false;

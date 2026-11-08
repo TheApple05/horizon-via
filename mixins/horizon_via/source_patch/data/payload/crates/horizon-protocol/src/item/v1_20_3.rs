@@ -6,6 +6,16 @@ use horizon_world::datafix::{self, dynamic as d, schema::Ty};
 use std::collections::{HashMap, VecDeque};
 
 mod numeric47_creative;
+pub(crate) fn try_write_numeric340_creative_stack(
+    stack: Option<&Stack>,
+    w: &mut Writer,
+) -> Result<()> {
+    if let Some(cache) = ids::legacy_item_cache() {
+        before_numeric47_cache_mutation(&cache.lock().unwrap());
+    }
+    numeric47_creative::try_write_at(stack, w, crate::adapter::ServerVersion::V1_12_2)
+}
+
 pub(crate) fn try_write_numeric47_creative_stack(
     stack: Option<&Stack>,
     w: &mut Writer,
@@ -330,7 +340,15 @@ pub(crate) fn from_numeric47_slot(
     raw: super::item47::Raw47Slot,
     old_name: impl FnOnce(i16) -> Option<String>,
 ) -> Result<Stack> {
-    let saved = raw.upgrade(old_name)?;
+    from_numeric_slot_at(raw, old_name, -1)
+}
+
+pub(crate) fn from_numeric_slot_at(
+    raw: super::item47::Raw47Slot,
+    old_name: impl FnOnce(i16) -> Option<String>,
+    data_version: i32,
+) -> Result<Stack> {
+    let saved = raw.upgrade_at(old_name, data_version)?;
     // Resolve the fully upgraded name, including wool/dye/wood/potion variants.
     let stack = from_tag(&saved, None)?;
     let key = Cache::key(&stack)

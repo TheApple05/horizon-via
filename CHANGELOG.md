@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 — experimental
+
+- Add native Java 1.12.2 (340) and 1.16.5 (754) adapters, version selection and automatic protocol detection.
+- Bridge their login directly into consumer configuration, including explicit registry mappings and version-specific terrain, lighting, items, inventory transactions, entities, recipes, text and effects.
+- Preserve numeric1.12 item variants with the correct data version, exact original NBT, and verified default creative conversions.
+- Keep source-version server settings deferred until play is available, and handle sparse1.16 biome IDs without changing the modern registry validator.
+- Extend synchronous creative restoration, old-server block prediction and projectile acceleration transport to the new adapters.
+
+Development validation passed 470 protocol tests and strict protocol Clippy. Native Windows checks against real offline vanilla 1.12.2 and 1.16.5 servers passed arbitrary-spawn terrain, inventory, server-confirmed chest transfers, chat, movement, creative placement, breaking, unsupported-item restoration and reconnects without translation diagnostics. The 1.16.5 check also passed Nether travel and return. These checks do not establish full old-client parity.
+
+Online authentication, modified servers and full playthroughs remain unverified; old two-input smithing menus remain unsupported. Newly created 1.12.2 creative spawn eggs require an original server-provided template; unrepresentable edited or newer creative stacks reject locally.
+
 ## 0.3.0 — experimental
 
 - Add an independent native Java 1.8.9 adapter with consumer-side configuration, old numeric items, connection-local terrain/light, entity and inventory state, effects, and dimension/reconnect handling.

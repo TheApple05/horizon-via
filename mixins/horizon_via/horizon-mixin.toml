@@ -1,6 +1,6 @@
 [mod]
 id = "horizon_via"
-version = "0.3.0"
+version = "0.4.0"
 
 [compatibility]
 horizon_revision = "d8edfbcd0f70aac5b41bab12b8bbf9cc3626de1f"

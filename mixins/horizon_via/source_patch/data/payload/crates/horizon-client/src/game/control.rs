@@ -766,16 +766,14 @@ impl Game<'_> {
             }
             "give" => {
                 self.require_world()?;
-                if self.remote.as_ref().is_some_and(|r| {
-                    r.menu.is_some()
-                        && r.session.server_version()
-                            == horizon_protocol::adapter::ServerVersion::V1_8_9
-                }) {
+                if self.uses_legacy_bridge()
+                    && self.remote.as_ref().is_some_and(|r| r.menu.is_some())
+                {
                     return Err(
                         "Close the server inventory before using give on this connection".into(),
                     );
                 }
-                if self.is_legacy47() && !self.creative {
+                if self.uses_legacy_bridge() && !self.creative {
                     return Err(
                         "Creative inventory edits require creative mode on this connection".into(),
                     );
@@ -800,7 +798,7 @@ impl Game<'_> {
                         .ok_or(super::integrated::NO_ANSWER)?;
                     return Ok(Some(json!({ "ok": true, "given": count })));
                 }
-                let legacy_before = self.is_legacy47().then(|| self.creative_stacks());
+                let legacy_before = self.uses_legacy_bridge().then(|| self.creative_stacks());
                 let max = info.max_stack;
                 let mut given = 0;
                 // Stop once the inventory is full.

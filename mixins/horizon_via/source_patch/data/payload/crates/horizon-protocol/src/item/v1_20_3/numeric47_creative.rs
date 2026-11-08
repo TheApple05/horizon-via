@@ -1,7 +1,11 @@
 //! A narrow verified reverse path for new creative stacks with vanilla default components.
 //! Existing inventory values always use the exact-original cache. No arbitrary NBT is reconstructed.
 use super::*;
-use crate::adapter::v1_8_9::{facts, ids as old};
+use crate::adapter::{
+    ServerVersion,
+    v1_8_9::{facts, ids as old},
+    v1_12_2::facts as later,
+};
 use std::sync::OnceLock;
 
 fn key(stack: &Stack) -> Option<Vec<u8>> {
@@ -37,21 +41,30 @@ fn key(stack: &Stack) -> Option<Vec<u8>> {
     Cache::key(&normalized)
 }
 
-fn canonical() -> &'static HashMap<Vec<u8>, super::super::item47::Raw47Slot> {
+fn canonical(version: ServerVersion) -> &'static HashMap<Vec<u8>, super::super::item47::Raw47Slot> {
     static VALUES: OnceLock<HashMap<Vec<u8>, super::super::item47::Raw47Slot>> = OnceLock::new();
-    VALUES.get_or_init(|| {
+    static LATER: OnceLock<HashMap<Vec<u8>, super::super::item47::Raw47Slot>> = OnceLock::new();
+    let (values, variants, old_name, data_version): (_, _, fn(i16) -> Option<String>, _) =
+        match version {
+            ServerVersion::V1_8_9 => (&VALUES, facts::CREATIVE_VARIANTS, old::old_item_name, -1),
+            ServerVersion::V1_12_2 => {
+                (&LATER, later::CREATIVE_VARIANTS, later::old_item_name, 1343)
+            }
+            _ => unreachable!("only numeric-slot adapters use the canonical creative writer"),
+        };
+    values.get_or_init(|| {
         let start = std::time::Instant::now();
         let mut values = HashMap::new();
         // Fact rows come from all real vanilla old base IDs and independently exercised subtype,
         // potion and spawn-egg samples. Every chosen encoding must upgrade to the same current key.
-        for &(id, damage) in facts::CREATIVE_VARIANTS {
+        for &(id, damage) in variants {
             let raw = super::super::item47::Raw47Slot {
                 id,
                 count: 1,
                 damage,
                 tag: Tag::End,
             };
-            let Ok(saved) = raw.upgrade(old::old_item_name) else {
+            let Ok(saved) = raw.upgrade_at(old_name, data_version) else {
                 continue;
             };
             let Ok(stack) = from_tag(&saved, None) else {
@@ -71,6 +84,14 @@ fn canonical() -> &'static HashMap<Vec<u8>, super::super::item47::Raw47Slot> {
 }
 
 pub(crate) fn try_write(stack: Option<&Stack>, writer: &mut Writer) -> Result<()> {
+    try_write_at(stack, writer, ServerVersion::V1_8_9)
+}
+
+pub(crate) fn try_write_at(
+    stack: Option<&Stack>,
+    writer: &mut Writer,
+    version: ServerVersion,
+) -> Result<()> {
     let Some(stack) = stack else {
         return super::super::item47::try_write_slot(None, writer);
     };
@@ -90,7 +111,7 @@ pub(crate) fn try_write(stack: Option<&Stack>, writer: &mut Writer) -> Result<()
             .try_write_original(&exact_key, stack.count, writer);
     }
     let semantic = key(stack).ok_or_else(|| Error::new("creative item key is too large"))?;
-    let mut raw = canonical().get(&semantic).cloned().ok_or_else(|| {
+    let mut raw = canonical(version).get(&semantic).cloned().ok_or_else(|| {
         Error::new("this new or edited creative item has no verified protocol47 representation")
     })?;
     raw.count = stack.count as i8;

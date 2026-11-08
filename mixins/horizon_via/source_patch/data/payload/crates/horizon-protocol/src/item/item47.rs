@@ -71,7 +71,17 @@ impl Raw47Slot {
 
     /// Produces current saved ItemStack NBT, ready for v1_20_3::from_tag(saved,None).
     /// Resolve the upgraded id by its current name: a raw id's base item mapping loses variants.
+    #[cfg(test)]
     pub fn upgrade(&self, old_name: impl FnOnce(i16) -> Option<String>) -> Result<Tag> {
+        self.upgrade_at(old_name, -1)
+    }
+
+    /// Numeric Slot framing survived through 1.12; later saved data must skip earlier fixes.
+    pub fn upgrade_at(
+        &self,
+        old_name: impl FnOnce(i16) -> Option<String>,
+        data_version: i32,
+    ) -> Result<Tag> {
         self.validate()?;
         let name = old_name(self.id)
             .filter(|name| name.starts_with("minecraft:"))
@@ -93,7 +103,7 @@ impl Raw47Slot {
             ("Damage", Tag::Short(self.damage)),
             ("tag", tag),
         ]);
-        datafix::update(Ty::ItemStack, &mut saved, -1, datafix::CURRENT);
+        datafix::update(Ty::ItemStack, &mut saved, data_version, datafix::CURRENT);
         let id = d::as_str(saved.get("id"))
             .filter(|id| id.starts_with("minecraft:"))
             .ok_or_else(|| Error::new("protocol 47 item upgrade produced no current id"))?;
@@ -232,5 +242,34 @@ impl Cache {
     pub fn try_write_original(&self, key: &[u8], count: i32, w: &mut Writer) -> Result<()> {
         let value = self.original(key, count)?;
         try_write_slot(Some(&value), w)
+    }
+}
+
+#[cfg(test)]
+mod data_version_tests {
+    use super::*;
+
+    #[test]
+    fn later_numeric_items_skip_the_pre_1_9_spawn_egg_damage_fix() {
+        let raw = Raw47Slot {
+            id: 383,
+            count: 1,
+            damage: 50,
+            tag: Tag::compound([(
+                "EntityTag",
+                Tag::compound([("id", d::string("minecraft:parrot"))]),
+            )]),
+        };
+        let name = |_| Some("minecraft:spawn_egg".to_owned());
+        let later = raw.upgrade_at(name, 1343).unwrap();
+        assert_eq!(
+            d::as_str(later.get("id")).as_deref(),
+            Some("minecraft:parrot_spawn_egg")
+        );
+        let old = raw.upgrade(name).unwrap();
+        assert_eq!(
+            d::as_str(old.get("id")).as_deref(),
+            Some("minecraft:creeper_spawn_egg")
+        );
     }
 }

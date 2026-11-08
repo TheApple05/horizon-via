@@ -1250,9 +1250,13 @@ impl Game<'_> {
             r.session.send(packet);
         }
     }
-    pub(super) fn is_legacy47(&self) -> bool {
+    pub(super) fn uses_legacy_bridge(&self) -> bool {
+        use horizon_protocol::adapter::ServerVersion;
         self.remote.as_ref().is_some_and(|r| {
-            r.session.server_version() == horizon_protocol::adapter::ServerVersion::V1_8_9
+            matches!(
+                r.session.server_version(),
+                ServerVersion::V1_8_9 | ServerVersion::V1_12_2 | ServerVersion::V1_16_5
+            )
         })
     }
     fn send_checked(&self, packet: S) -> horizon_protocol::adapter::SendDisposition {
@@ -1263,7 +1267,7 @@ impl Game<'_> {
             })
     }
     fn send_for_prediction(&mut self, packet: S) -> bool {
-        if !self.is_legacy47() {
+        if !self.uses_legacy_bridge() {
             self.send(packet);
             return true;
         }
@@ -1274,7 +1278,7 @@ impl Game<'_> {
         self.send_checked(packet) == horizon_protocol::adapter::SendDisposition::Sent
     }
     fn retain_prediction(&mut self, pos: [i32; 3], before: BlockStateId, sequence: i32) {
-        if self.is_legacy47() {
+        if self.uses_legacy_bridge() {
             return;
         }
         if let Some(r) = self.remote.as_mut() {
@@ -2318,6 +2322,14 @@ impl Game<'_> {
     /// two, plus three) chunks each way.
     pub(super) fn remote_chunk_in_range(&self, x: i32, z: i32) -> bool {
         self.remote.as_ref().is_none_or(|r| {
+            use horizon_protocol::adapter::ServerVersion;
+            // Before view-centre packets, only the server's unload removes columns.
+            if matches!(
+                r.session.server_version(),
+                ServerVersion::V1_8_9 | ServerVersion::V1_12_2
+            ) {
+                return true;
+            }
             let range = r.view_distance.max(2) + 3;
             (x - r.chunk_center.0).abs() <= range && (z - r.chunk_center.1).abs() <= range
         })
@@ -2539,7 +2551,7 @@ impl Game<'_> {
     /// predicted state until the server acknowledges the action; the server's state is
     /// remembered for then.
     fn server_block(&mut self, pos: [i32; 3], state: i32) {
-        if self.is_legacy47() {
+        if self.uses_legacy_bridge() {
             if let Some(r) = self.remote.as_mut() {
                 r.predictions.remove(&pos);
             }
@@ -2560,7 +2572,7 @@ impl Game<'_> {
     /// actions up to `sequence` are settled, so the blocks they predicted take the state the
     /// server gave them (a break the server refused comes back).
     fn end_predictions(&mut self, sequence: i32) {
-        if self.is_legacy47() {
+        if self.uses_legacy_bridge() {
             return;
         }
         let Some(r) = self.remote.as_mut() else {
@@ -3561,12 +3573,16 @@ impl Game<'_> {
             // the rope.
             C::SetEntityLink(p) => {
                 let me = self.remote.as_ref().map(|r| r.entity_id);
-                let legacy47 = self.remote.as_ref().is_some_and(|r| {
-                    r.session.server_version() == horizon_protocol::adapter::ServerVersion::V1_8_9
+                let negative_detach = self.remote.as_ref().is_some_and(|r| {
+                    use horizon_protocol::adapter::ServerVersion;
+                    matches!(
+                        r.session.server_version(),
+                        ServerVersion::V1_8_9 | ServerVersion::V1_12_2
+                    )
                 });
                 use horizon_client::mobs::leash::Holder;
                 let holder = match p.dest {
-                    d if (legacy47 && d < 0) || (!legacy47 && d == 0) => None,
+                    d if (negative_detach && d < 0) || (!negative_detach && d == 0) => None,
                     d if Some(d) == me => Some(Holder::Player),
                     d => match self.remote_knots.get(&(d as u32)) {
                         Some(&block) => Some(Holder::Knot(block)),
@@ -7192,7 +7208,7 @@ impl Game<'_> {
             slot,
             item: self.to_network(&stack),
         });
-        if self.is_legacy47() {
+        if self.uses_legacy_bridge() {
             if self.send_checked(packet) != horizon_protocol::adapter::SendDisposition::Sent {
                 self.set_menu_slot(0, i32::from(slot), before);
                 // Keep the old sent tracker: a genuinely older unsent edit may still need sending.
@@ -7289,7 +7305,7 @@ impl Game<'_> {
             let seq = self.next_sequence();
             // DebugStickItem.canDestroyBlock never lets the client break the
             // block; the server only selects the property on this START.
-            if !self.is_legacy47() && !debug_stick {
+            if !self.uses_legacy_bridge() && !debug_stick {
                 self.predict_break(hit.pos, state, seq);
             }
             if !self.send_for_prediction(S::PlayerAction(play::PlayerAction {
@@ -7300,7 +7316,7 @@ impl Game<'_> {
             })) {
                 return;
             }
-            if self.is_legacy47() && !debug_stick {
+            if self.uses_legacy_bridge() && !debug_stick {
                 self.predict_break(hit.pos, state, seq);
             }
             if let Some(r) = self.remote.as_mut() {
@@ -7394,7 +7410,7 @@ impl Game<'_> {
             let seq = self.next_sequence();
             // DebugStickItem.canDestroyBlock: the server selects the property
             // and sends the block update instead; never predict a break.
-            if !self.is_legacy47() && !debug_stick {
+            if !self.uses_legacy_bridge() && !debug_stick {
                 self.predict_break(pos, state, seq);
             }
             if !self.send_for_prediction(S::PlayerAction(play::PlayerAction {
@@ -7405,7 +7421,7 @@ impl Game<'_> {
             })) {
                 return;
             }
-            if self.is_legacy47() && !debug_stick {
+            if self.uses_legacy_bridge() && !debug_stick {
                 self.predict_break(pos, state, seq);
             }
             if let Some(r) = self.remote.as_mut() {
@@ -10494,9 +10510,7 @@ impl horizon_client::interaction_input::InteractionWorld for RemoteInputWorld<'_
         self.0.remote_use();
     }
     fn pick(&mut self) {
-        if self.0.remote.as_ref().is_some_and(|r| {
-            r.session.server_version() == horizon_protocol::adapter::ServerVersion::V1_8_9
-        }) {
+        if self.0.uses_legacy_bridge() {
             // This wire predates server-directed pick packets: its client selects/creates the
             // clone stack locally, then synchronizes creative changes and the selected hotbar.
             let entity = self.0.pick_entity_hit();

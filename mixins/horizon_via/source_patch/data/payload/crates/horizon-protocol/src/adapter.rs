@@ -7,8 +7,11 @@
 //! pinned ones.
 pub mod ids;
 mod legacy;
+mod native;
 pub mod session;
 mod translate;
+pub mod v1_12_2;
+pub mod v1_16_5;
 pub mod v1_8_9;
 pub(crate) use translate::v1_20_2::read_component as read_legacy_component;
 pub mod v1_20_1;
@@ -73,13 +76,19 @@ pub enum ServerVersion {
     V1_20_2,
     /// 1.20 and 1.20.1: one protocol. Development target pending native validation.
     V1_20_1,
+    V1_16_5,
+    V1_12_2,
     /// Java1.8.x, translated directly to native consumer packets.
     V1_8_9,
 }
 
 impl ServerVersion {
+    pub(crate) fn uses_native_bridge(self) -> bool {
+        matches!(self, Self::V1_8_9 | Self::V1_12_2 | Self::V1_16_5)
+    }
+
     /// Newest first.
-    pub const ALL: [Self; 16] = [
+    pub const ALL: [Self; 18] = [
         Self::Current,
         Self::V26_2,
         Self::V26_1,
@@ -95,6 +104,8 @@ impl ServerVersion {
         Self::V1_20_3,
         Self::V1_20_2,
         Self::V1_20_1,
+        Self::V1_16_5,
+        Self::V1_12_2,
         Self::V1_8_9,
     ];
 
@@ -122,6 +133,8 @@ impl ServerVersion {
             Self::V1_20_3 => v1_20_3::PROTOCOL,
             Self::V1_20_2 => v1_20_2::PROTOCOL,
             Self::V1_20_1 => v1_20_1::PROTOCOL,
+            Self::V1_16_5 => 754,
+            Self::V1_12_2 => 340,
             Self::V1_8_9 => 47,
         }
     }
@@ -144,6 +157,8 @@ impl ServerVersion {
             Self::V1_20_3 => v1_20_3::NAME,
             Self::V1_20_2 => v1_20_2::NAME,
             Self::V1_20_1 => v1_20_1::NAME,
+            Self::V1_16_5 => "1.16.5",
+            Self::V1_12_2 => "1.12.2",
             Self::V1_8_9 => "1.8.9",
         }
     }
@@ -371,7 +386,7 @@ impl ServerVersion {
             ..v1_20_1_ids::IDS
         };
         match self {
-            Self::Current | Self::V1_8_9 => None,
+            Self::Current | Self::V1_8_9 | Self::V1_12_2 | Self::V1_16_5 => None,
             Self::V26_2 => Some(&V26_2),
             Self::V26_1 => Some(&V26_1),
             Self::V1_21_11 => Some(&V1_21_11),
@@ -392,7 +407,7 @@ impl ServerVersion {
     fn map(self, state: State, direction: Direction, id: i32) -> Option<i32> {
         let table = match (self, direction) {
             (Self::Current, _) => return Some(id),
-            (Self::V1_8_9, _) => {
+            (Self::V1_8_9 | Self::V1_12_2 | Self::V1_16_5, _) => {
                 return match state {
                     State::Handshake if id == 0 => Some(id),
                     State::Status if (0..=1).contains(&id) => Some(id),

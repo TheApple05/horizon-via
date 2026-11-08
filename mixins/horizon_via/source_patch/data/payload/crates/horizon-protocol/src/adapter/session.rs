@@ -59,7 +59,7 @@ pub struct Session {
     pub(super) legacy_items: Arc<Mutex<crate::item::v1_20_3::Cache>>,
     pub(super) legacy_resource_packs: Mutex<translate::v1_20_2::ResourcePacks>,
     pre_configuration: Mutex<pre_configuration::Bootstrap>,
-    legacy47: Mutex<super::v1_8_9::bridge::Bridge>,
+    native: Option<Mutex<super::native::Bridge>>,
     login_requires_authentication: AtomicBool,
     legacy_secure_chat_enforcement: Mutex<Option<bool>>,
     reading: AtomicU8,
@@ -91,7 +91,7 @@ impl Session {
             legacy_items: Arc::new(Mutex::new(Default::default())),
             legacy_resource_packs: Mutex::new(Default::default()),
             pre_configuration: Mutex::new(Default::default()),
-            legacy47: Mutex::new(Default::default()),
+            native: super::native::Bridge::new(version).map(Mutex::new),
             login_requires_authentication: AtomicBool::new(false),
             legacy_secure_chat_enforcement: Mutex::new(None),
             reading: AtomicU8::new(0),
@@ -104,10 +104,8 @@ impl Session {
     }
     /// This is adapter-owned state, never a wire opcode or custom payload channel.
     pub fn take_legacy47_projectile_acceleration(&self, id: i32) -> Option<[f64; 3]> {
-        if self.version != ServerVersion::V1_8_9 {
-            return None;
-        }
-        self.legacy47
+        self.native
+            .as_ref()?
             .lock()
             .unwrap()
             .take_projectile_acceleration(id)
@@ -145,14 +143,19 @@ impl Session {
     /// knows no such packet.
     pub fn clientbound(&self, id: i32, payload: Vec<u8>) -> Result<Option<(i32, Vec<u8>)>> {
         let state = self.reading();
-        if self.version == ServerVersion::V1_8_9 {
+        if let Some(native) = &self.native {
             let _pinned = super::ids::unrenumbered();
-            let _names = super::ids::legacy_registries(super::v1_8_9::bootstrap::names());
             let _items = super::ids::legacy_items(self.legacy_items.clone());
-            let mut bridge = self.legacy47.lock().unwrap();
+            let mut bridge = native.lock().unwrap();
+            let _names = super::ids::legacy_registries(bridge.names());
             let transaction =
                 crate::item::v1_20_3::Numeric47Transaction::new(self.legacy_items.clone());
-            let result = bridge.clientbound(state, id, payload)?;
+            let result = bridge.clientbound(state, id, payload).map_err(|error| {
+                crate::Error::new(format!(
+                    "{} {state:?} clientbound {id:#x}: {error}",
+                    self.version.name()
+                ))
+            })?;
             self.login_requires_authentication
                 .store(bridge.online_mode(), Ordering::Release);
             if let Some(phase) = result.phase {
@@ -254,8 +257,8 @@ impl Session {
     /// A packet body (VarInt id + payload) Horizon sends, as this server numbers and lays it out. `None`:
     /// the server has no such packet, so nothing is sent.
     pub fn serverbound(&self, body: &[u8]) -> Result<Option<Vec<u8>>> {
-        if self.version == ServerVersion::V1_8_9 {
-            return self.serverbound47(body, false).map(|(body, _)| body);
+        if self.native.is_some() {
+            return self.serverbound_native(body, false).map(|(body, _)| body);
         }
         let state = self.writing();
         let _legacy = self
@@ -304,8 +307,8 @@ impl Session {
         &self,
         body: &[u8],
     ) -> Result<(Option<Vec<u8>>, super::SendDisposition)> {
-        if self.version == ServerVersion::V1_8_9 {
-            return self.serverbound47(body, true);
+        if self.native.is_some() {
+            return self.serverbound_native(body, true);
         }
         let translated = self.serverbound(body)?;
         let disposition = if translated.is_some() {
@@ -316,7 +319,7 @@ impl Session {
         Ok((translated, disposition))
     }
 
-    fn serverbound47(
+    fn serverbound_native(
         &self,
         body: &[u8],
         checked: bool,
@@ -332,9 +335,9 @@ impl Session {
                 .map(|packet| (Some(packet), D::Sent));
         }
         let _pinned = super::ids::unrenumbered();
-        let _names = super::ids::legacy_registries(super::v1_8_9::bootstrap::names());
         let _items = super::ids::legacy_items(self.legacy_items.clone());
-        let mut bridge = self.legacy47.lock().unwrap();
+        let mut bridge = self.native.as_ref().unwrap().lock().unwrap();
+        let _names = super::ids::legacy_registries(bridge.names());
         // Older local output remains in FIFO order; only this call's new correction is eligible.
         self.incoming
             .lock()
@@ -342,8 +345,14 @@ impl Session {
             .extend(bridge.take_predictions());
         let transaction =
             crate::item::v1_20_3::Numeric47Transaction::new(self.legacy_items.clone());
-        let result = bridge.serverbound(state, id, payload)?;
+        let result = bridge.serverbound(state, id, payload).map_err(|error| {
+            crate::Error::new(format!(
+                "{} {state:?} serverbound {id:#x}: {error}",
+                self.version.name()
+            ))
+        })?;
         let disposition = if bridge.rejected_locally() {
+            crate::item::v1_20_3::reject_numeric47_transaction();
             D::LocallyRejected
         } else if result.packet.is_some() || !result.extra.is_empty() {
             D::Sent
@@ -374,11 +383,11 @@ impl Session {
     /// A packet the translation made that Horizon reads next, already in the pinned version's numbering.
     pub fn next_incoming(&self) -> Option<(i32, Vec<u8>)> {
         let packet = self.incoming.lock().unwrap().pop_front();
-        if self.version == ServerVersion::V1_8_9
+        if let Some(native) = &self.native
             && let Some((ids::configuration::clientbound::FINISH_CONFIGURATION, payload)) = &packet
             && payload.is_empty()
         {
-            self.legacy47.lock().unwrap().finish_delivered();
+            native.lock().unwrap().finish_delivered();
         }
         if self.version == ServerVersion::V1_20_1
             && let Some((ids::configuration::clientbound::FINISH_CONFIGURATION, payload)) = &packet

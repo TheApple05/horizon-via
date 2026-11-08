@@ -547,5 +547,7 @@
   "horizon.multiplayer.horizon_via.armored_paws": "Armored Paws",
   "horizon.multiplayer.horizon_via.trails_tales": "Trails & Tales",
   "horizon.multiplayer.horizon_via.bountiful_update": "The Bountiful Update",
+  "horizon.multiplayer.horizon_via.nether_update": "Nether Update",
+  "horizon.multiplayer.horizon_via.world_of_color": "World of Color Update",
   "horizon.multiplayer.horizon_via.unavailable_action": "That item or action is unavailable on this server version."
 }
