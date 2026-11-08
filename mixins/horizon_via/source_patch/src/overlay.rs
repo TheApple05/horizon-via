@@ -231,6 +231,9 @@ fn allowed(path: &str) -> bool {
         || matches!(
             path,
             "crates/horizon-protocol/examples/probe.rs"
+                | "crates/horizon-client/src/menu.rs"
+                | "crates/horizon-client/src/game/remote_stations.rs"
+                | "crates/horizon-client/src/game/stations.rs"
                 | "crates/horizon-client-render/src/light.rs"
                 | "crates/horizon-client/src/game.rs"
                 | "crates/horizon-client/src/game/control.rs"

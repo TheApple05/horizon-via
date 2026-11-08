@@ -70,6 +70,8 @@ pub(super) struct State {
     unlocked: BTreeSet<String>,
     highlighted: BTreeSet<String>,
     received_book: bool,
+    smithing_base: BTreeSet<i32>,
+    smithing_addition: BTreeSet<i32>,
 }
 
 impl State {
@@ -812,6 +814,8 @@ impl State {
     fn declarations(&mut self, r: &mut Reader<'_>) -> Result<()> {
         let n = r.count(65536)?;
         self.groups.clear();
+        self.smithing_base.clear();
+        self.smithing_addition.clear();
         let mut declarations = HashMap::new();
         for _ in 0..n {
             let kind = r.string(32767)?;
@@ -906,9 +910,15 @@ impl State {
                     })
                 }
                 "minecraft:smithing" => {
-                    ingredient(r)?;
-                    ingredient(r)?;
+                    let (_, base) = ingredient(r)?;
+                    let (_, addition) = ingredient(r)?;
                     result(r)?;
+                    if let recipes::HolderSet::Items(items) = base {
+                        self.smithing_base.extend(items);
+                    }
+                    if let recipes::HolderSet::Items(items) = addition {
+                        self.smithing_addition.extend(items);
+                    }
                     None
                 }
                 name if name.starts_with("minecraft:crafting_special_") => None,
@@ -1040,6 +1050,8 @@ impl State {
         .into_iter()
         .map(|name| (name, BTreeSet::new()))
         .collect();
+        sets.insert("smithing_base", self.smithing_base.clone());
+        sets.insert("smithing_addition", self.smithing_addition.clone());
         let mut stonecutting = Vec::new();
         let mut keys = self.recipes.keys().collect::<Vec<_>>();
         keys.sort_unstable();
@@ -1280,5 +1292,52 @@ mod tests {
         }
         w.u8(0);
         assert!(state.clientbound(77, &w.data).is_err());
+    }
+}
+
+#[cfg(test)]
+mod smithing_recipe_tests {
+    use super::*;
+    #[test]
+    fn actual_smithing_declarations_publish_all_additions_and_replace_them_on_reload() {
+        let _names = crate::adapter::ids::legacy_registries(super::super::names());
+        let _items = crate::adapter::ids::legacy_items(std::sync::Arc::new(std::sync::Mutex::new(
+            Default::default(),
+        )));
+        let hex = "09126d696e6563726166743a736d697468696e67206d696e6563726166743a6e65746865726974655f6178655f736d697468696e670101de04010a000003000644616d61676500000000000101c504010001e304010a000003000644616d6167650000000000126d696e6563726166743a736d697468696e67226d696e6563726166743a6e65746865726974655f626f6f74735f736d697468696e670101fd04010a000003000644616d61676500000000000101c5040100018505010a000003000644616d6167650000000000126d696e6563726166743a736d697468696e67276d696e6563726166743a6e65746865726974655f6368657374706c6174655f736d697468696e670101fb04010a000003000644616d61676500000000000101c5040100018305010a000003000644616d6167650000000000126d696e6563726166743a736d697468696e67236d696e6563726166743a6e65746865726974655f68656c6d65745f736d697468696e670101fa04010a000003000644616d61676500000000000101c5040100018205010a000003000644616d6167650000000000126d696e6563726166743a736d697468696e67206d696e6563726166743a6e65746865726974655f686f655f736d697468696e670101df04010a000003000644616d61676500000000000101c504010001e404010a000003000644616d6167650000000000126d696e6563726166743a736d697468696e67256d696e6563726166743a6e65746865726974655f6c656767696e67735f736d697468696e670101fc04010a000003000644616d61676500000000000101c5040100018405010a000003000644616d6167650000000000126d696e6563726166743a736d697468696e67246d696e6563726166743a6e65746865726974655f7069636b6178655f736d697468696e670101dd04010a000003000644616d61676500000000000101c504010001e204010a000003000644616d6167650000000000126d696e6563726166743a736d697468696e67236d696e6563726166743a6e65746865726974655f73686f76656c5f736d697468696e670101dc04010a000003000644616d61676500000000000101c504010001e104010a000003000644616d6167650000000000126d696e6563726166743a736d697468696e67226d696e6563726166743a6e65746865726974655f73776f72645f736d697468696e670101db04010a000003000644616d61676500000000000101c504010001e004010a000003000644616d6167650000000000";
+        let bytes = (0..hex.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
+            .collect::<Vec<_>>();
+        let mut state = State::default();
+        let packets = state.clientbound(90, &bytes).unwrap().unwrap();
+        let play::Clientbound::Unknown(id, payload) = &packets[0] else {
+            panic!()
+        };
+        assert_eq!(*id, crate::ids::play::clientbound::UPDATE_RECIPES);
+        let mut r = Reader::new(payload);
+        let mut properties = BTreeMap::new();
+        for _ in 0..r.count(32).unwrap() {
+            let name = r.string(32767).unwrap();
+            let values = (0..r.count(1024).unwrap())
+                .map(|_| r.varint().unwrap())
+                .collect::<BTreeSet<_>>();
+            properties.insert(name, values);
+        }
+        assert_eq!(
+            properties["minecraft:smithing_addition"],
+            BTreeSet::from([item_id("minecraft:netherite_ingot").unwrap()])
+        );
+        assert_eq!(properties["minecraft:smithing_base"].len(), 9);
+        assert!(properties["minecraft:smithing_template"].is_empty());
+        assert_eq!(r.varint().unwrap(), 0);
+        assert_eq!(r.remaining(), 0);
+        for end in 0..bytes.len() {
+            assert!(state.clientbound(90, &bytes[..end]).is_err());
+            assert_eq!(state.smithing_base.len(), 9);
+            assert_eq!(state.smithing_addition.len(), 1);
+        }
+        state.clientbound(90, &[0]).unwrap();
+        assert!(state.smithing_addition.is_empty() && state.smithing_base.is_empty());
     }
 }

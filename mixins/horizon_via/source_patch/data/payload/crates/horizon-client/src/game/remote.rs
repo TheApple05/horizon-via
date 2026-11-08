@@ -51,7 +51,7 @@ use horizon_world::{
     stepped_interpolation::{Path, PosRot, Start, SteppedInterpolation},
 };
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -537,6 +537,8 @@ pub(super) struct Remote {
     /// The crafting result slot of the open menu as the server last set it
     /// (`CraftingMenu.slotChangedCraftingGrid`): the client never computes it.
     pub(super) craft_result: Option<ItemStack>,
+    /// All additions in this 1.16.5 connection's synchronized smithing recipes.
+    pub(super) legacy_smithing_additions: HashSet<String>,
     /// The open menu's title as the server named it, with its styles.
     pub(super) menu_title: Option<horizon_client::text::Text>,
     state_id: i32,
@@ -1044,6 +1046,7 @@ impl Game<'_> {
             predictions: HashMap::new(),
             menu: None,
             craft_result: None,
+            legacy_smithing_additions: HashSet::new(),
             menu_title: None,
             state_id: 0,
             use_target: None,
@@ -4619,6 +4622,24 @@ impl Game<'_> {
                 }
             }
             C::TagQuery(p) => self.answer_tag_query(p.transaction, p.tag),
+            C::Unknown(id, data)
+                if id == horizon_protocol::ids::play::clientbound::UPDATE_RECIPES
+                    && self.remote.as_ref().is_some_and(|r| {
+                        r.session.server_version()
+                            == horizon_protocol::adapter::ServerVersion::V1_16_5
+                    }) =>
+            {
+                let r = self.remote.as_mut().expect("guarded remote");
+                let additions = super::remote_stations::legacy_smithing_additions(&data, |id| {
+                    r.builtin
+                        .get("minecraft:item")
+                        .and_then(|items| items.name(id))
+                        .filter(|name| !name.is_empty())
+                        .map(str::to_owned)
+                })?;
+                // A reload replaces the complete set, including an empty one.
+                r.legacy_smithing_additions = additions;
+            }
             C::Unknown(id, data)
                 if id == horizon_protocol::ids::play::clientbound::COMMAND_SUGGESTIONS =>
             {

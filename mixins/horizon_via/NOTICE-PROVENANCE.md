@@ -33,3 +33,5 @@ Permissive references consulted for route discovery and factual packet/layout de
 - Leafish at `784d76f6836964c746621c506d0051b394d2d31f`: item/entity/block mapping and chunk-test declarations, under its reviewed MIT/Apache-2.0 licensing.
 
 No implementation function bodies from those projects were copied or ported into these additions. Runtime tables were independently generated from the official game facts. No GPL or other prohibited implementation source was inspected or used.
+
+The 1.16.5 two-input smithing compatibility code is also original Rust. Slot ordering, transfer and consumption rules, base-item NBT copying and selected synthetic packet fixtures were checked against official vanilla menu, recipe and packet-writer execution. Private Java oracles and game files are excluded from the distribution.

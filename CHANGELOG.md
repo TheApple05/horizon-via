@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.1 — experimental
+
+- Support Java 1.16.5 smithing with two visible inputs and no upgrade template.
+- Translate window slots and clicks while keeping the server's result authoritative, including original item NBT, names, enchantments and damage.
+- Match old ordinary pickup, shift-click routing, input consumption, full-inventory protection and close/reopen behavior. Sync smithing additions from server recipes, including recipe reloads.
+- Reject changes to the absent template slot locally and preserve existing transaction recovery and newer-server smithing behavior.
+
+Native Windows checks against a fresh offline vanilla 1.16.5 server passed ordinary and shift-click upgrades, server-confirmed base NBT preservation and exact ingredient consumption, input routing, and close/reopen recovery. The two-input screen was visually inspected; normal translation diagnostics were zero. Full-inventory and recipe-update boundaries also have focused Rust regressions. Online authentication, modified servers and other platforms remain unverified.
+
 ## 0.4.0 — experimental
 
 - Add native Java 1.12.2 (340) and 1.16.5 (754) adapters, version selection and automatic protocol detection.

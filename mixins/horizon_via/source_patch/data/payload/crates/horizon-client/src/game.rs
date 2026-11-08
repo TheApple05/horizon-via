@@ -9826,6 +9826,12 @@ impl Game<'_> {
             None => game_of.iter().position(|x| *x == Some(g)),
         };
         let mut menu = Menu::new(kind);
+        if self.legacy_smithing() {
+            menu.legacy_smithing_additions = self
+                .station
+                .as_ref()
+                .and_then(|s| s.legacy_smithing_additions.clone());
+        }
         if matches!(kind, Kind::Mount(_)) {
             menu.mount = self.mount_menu_entity();
         }

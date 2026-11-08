@@ -10,6 +10,7 @@ struct Window {
     slots: Vec<Option<Stack>>,
     known: bool,
     revisions: Vec<u64>,
+    smithing: bool,
 }
 
 impl Window {
@@ -21,16 +22,22 @@ impl Window {
             slots: vec![None; len],
             known: false,
             revisions: vec![0; len],
+            smithing: false,
         }
     }
     fn advance(&mut self) {
         self.state = self.state.wrapping_add(1) & 0x7fff_ffff;
     }
     fn content(&self, carried: &Option<Stack>) -> play::Clientbound {
+        let mut items = self.slots.clone();
+        if self.smithing {
+            // The consumer's template slot has no counterpart on the old server.
+            items.insert(0, None);
+        }
         play::Clientbound::ContainerSetContent(play::ContainerSetContent {
             container: i32::from(self.id),
             state: self.state,
-            items: self.slots.clone(),
+            items,
             carried: carried.clone(),
         })
     }
@@ -314,6 +321,7 @@ impl Inventory {
                     win.revisions[slot as usize] = revision;
                     win.advance();
                     let state = win.state;
+                    let slot = slot + i16::from(win.smithing);
                     self.mirror(id);
                     out.push(C::ContainerSetSlot(play::ContainerSetSlot {
                         container: i32::from(id),
@@ -366,7 +374,7 @@ impl Inventory {
                     17 => 4,
                     18 => 3,
                     19 => 27,
-                    20 => return Err(Error::new("1.16.5 two-input smithing is not implemented")),
+                    20 => 3,
                     21 => 3,
                     22 => 3,
                     23 => 2,
@@ -374,6 +382,7 @@ impl Inventory {
                 };
                 let mapped = up(tables::MENU_UP, menu)?;
                 self.open = Some(Window::new(id, top as usize + 36));
+                self.open.as_mut().unwrap().smithing = menu == 20;
                 self.carried = None;
                 self.retire_pending();
                 self.waiting = None;
@@ -523,17 +532,28 @@ impl Inventory {
                 }
                 let before = self.active().slots.clone();
                 let carried = self.carried.clone();
+                let smithing = self.active().smithing;
+                let slot = if smithing && p.slot >= 0 {
+                    p.slot - 1
+                } else {
+                    p.slot
+                };
                 let outcome = (|| -> Result<(Vec<Option<Stack>>, Option<Stack>)> {
-                    if !(0..=6).contains(&p.input) || p.slot < 0 && p.slot != -999 {
+                    if !(0..=6).contains(&p.input) || slot < 0 && slot != -999 {
                         return Err(Error::new("invalid old inventory click"));
                     }
-                    if p.slot >= 0 && p.slot as usize >= before.len() {
+                    if slot >= 0 && slot as usize >= before.len() {
                         return Err(Error::new("old click slot outside menu"));
                     }
                     let mut slots = before.clone();
                     for (slot, hash) in &p.changed {
+                        if smithing && *slot == 0 && hash.is_none() {
+                            continue;
+                        }
                         let slot = usize::try_from(*slot)
-                            .map_err(|_| Error::new("negative predicted slot"))?;
+                            .ok()
+                            .and_then(|slot| slot.checked_sub(usize::from(smithing)))
+                            .ok_or_else(|| Error::new("predicted slot has no old counterpart"))?;
                         if slot >= slots.len() {
                             return Err(Error::new("predicted slot outside menu"));
                         }
@@ -548,15 +568,17 @@ impl Inventory {
                         true,
                     )));
                 };
-                let returned = if matches!(p.input, 0 | 1) && p.slot >= 0 {
-                    before[p.slot as usize].clone()
-                } else {
-                    None
-                };
+                // A failed quick move returns EMPTY in AbstractContainerMenu.clicked.
+                let returned =
+                    if matches!(p.input, 0 | 1) && slot >= 0 && (p.input != 1 || slots != before) {
+                        before[slot as usize].clone()
+                    } else {
+                        None
+                    };
                 let window = self.active().id;
                 let action = self.active().action.wrapping_add(1);
                 w.u8(window);
-                w.i16(p.slot);
+                w.i16(slot);
                 w.i8(p.button);
                 w.i16(action);
                 w.varint(p.input);
@@ -738,6 +760,317 @@ mod tests {
                 );
                 assert!(inventory.waiting.is_none());
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod smithing_tests {
+    use super::*;
+    const CONTENT: &str = "07002701db04010a0000030008426173654f6e6c790000002a03000a526570616972436f73740000000501000b556e627265616b61626c650103000644616d616765000000250a0007646973706c61790800044e616d65001a7b2274657874223a2253796e7468657469632073776f7264227d0009000c456e6368616e746d656e74730a000000010200036c766c0003080002696400146d696e6563726166743a756e627265616b696e67000001c504050a000003000c4164646974696f6e4f6e6c79000000630001e004010a0000030008426173654f6e6c790000002a03000a526570616972436f73740000000501000b556e627265616b61626c650103000644616d616765000000250a0007646973706c61790800044e616d65001a7b2274657874223a2253796e7468657469632073776f7264227d0009000c456e6368616e746d656e74730a000000010200036c766c0003080002696400146d696e6563726166743a756e627265616b696e67000001090c000000000000000000000000000000000000000000000000000000000000000000000000";
+    const PICKUP: &str = "0700020000250001e004010a0000030008426173654f6e6c790000002a03000a526570616972436f73740000000501000b556e627265616b61626c650103000644616d616765000000250a0007646973706c61790800044e616d65001a7b2274657874223a2253796e7468657469632073776f7264227d0009000c456e6368616e746d656e74730a000000010200036c766c0003080002696400146d696e6563726166743a756e627265616b696e670000";
+    fn bytes(hex: &str) -> Vec<u8> {
+        (0..hex.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
+            .collect()
+    }
+    struct Names;
+    impl crate::item::Names for Names {
+        fn name(&self, registry: &str, id: i32) -> Option<String> {
+            registry_ids::legacy_registry_name(registry, id)
+        }
+    }
+    fn hash(stack: &Stack) -> Hashed {
+        Hashed::create(stack, &Names)
+    }
+    fn item(name: &str, count: i32) -> Stack {
+        let id = tables::ITEM_NAMES.iter().position(|v| *v == name).unwrap();
+        Stack::new(tables::ITEM_UP[id], count)
+    }
+    fn open(inventory: &mut Inventory, id: i32, kind: i32) {
+        let mut w = Writer::new();
+        w.varint(id);
+        w.varint(kind);
+        w.string(r#"{"text":"Smithing"}"#);
+        let packets = inventory.clientbound(45, &w.data).unwrap().unwrap().0;
+        assert!(
+            matches!(&packets[0], play::Clientbound::OpenScreen(p) if p.container == id && p.menu == tables::MENU_UP[kind as usize])
+        );
+    }
+    fn with_inventory(run: impl FnOnce(&mut Inventory)) {
+        let _names = registry_ids::legacy_registries(names());
+        let _cache =
+            registry_ids::legacy_items(Arc::new(std::sync::Mutex::new(Default::default())));
+        let mut inventory = Inventory::default();
+        open(&mut inventory, 7, 20);
+        let packets = inventory
+            .clientbound(19, &bytes(CONTENT))
+            .unwrap()
+            .unwrap()
+            .0;
+        let play::Clientbound::ContainerSetContent(content) = &packets[0] else {
+            panic!()
+        };
+        assert_eq!(content.items.len(), 40);
+        assert!(content.items[0].is_none());
+        assert_eq!(
+            content.items[1].as_ref().unwrap().item,
+            item("minecraft:diamond_sword", 1).item
+        );
+        assert_eq!(content.items[2].as_ref().unwrap().count, 5);
+        assert_eq!(
+            content.items[3].as_ref().unwrap().item,
+            item("minecraft:netherite_sword", 1).item
+        );
+        assert_eq!(content.items[4].as_ref().unwrap().count, 12);
+        run(&mut inventory);
+    }
+    fn click(
+        inventory: &mut Inventory,
+        slot: i16,
+        input: i32,
+        changed: Vec<(i16, Option<Hashed>)>,
+        carried: Option<Hashed>,
+    ) -> (Option<Vec<u8>>, Vec<play::Clientbound>, bool) {
+        let encoded = play::Serverbound::ContainerClick(play::ContainerClick {
+            container: i32::from(inventory.active().id),
+            state: inventory.active().state,
+            slot,
+            button: 0,
+            input,
+            changed,
+            carried,
+        })
+        .encode();
+        let (id, payload) = packet(encoded);
+        inventory.serverbound(id, &payload).unwrap().unwrap()
+    }
+    fn take_result(inventory: &mut Inventory) -> (Option<Vec<u8>>, Vec<play::Clientbound>, bool) {
+        let result = inventory.active().slots[2].as_ref().unwrap().clone();
+        let mut addition = inventory.active().slots[1].as_ref().unwrap().clone();
+        addition.count = 4;
+        click(
+            inventory,
+            3,
+            0,
+            vec![(1, None), (2, Some(hash(&addition))), (3, None)],
+            Some(hash(&result)),
+        )
+    }
+    fn set_slot(
+        inventory: &mut Inventory,
+        window: i8,
+        slot: i16,
+        item: Option<Stack>,
+    ) -> Vec<play::Clientbound> {
+        let mut w = Writer::new();
+        w.i8(window);
+        w.i16(slot);
+        write_slot(&item, &mut w).unwrap();
+        inventory.clientbound(21, &w.data).unwrap().unwrap().0
+    }
+    #[test]
+    fn actual_writer_content_and_result_pickup_preserve_slots_and_tagged_output() {
+        with_inventory(|inventory| {
+            inventory.active_mut().action = 36;
+            let wire = take_result(inventory).0.unwrap();
+            let mut actual = Reader::new(&wire);
+            assert_eq!(actual.varint().unwrap(), 9);
+            let expected_bytes = bytes(PICKUP);
+            let mut expected = Reader::new(&expected_bytes);
+            assert_eq!(actual.u8().unwrap(), expected.u8().unwrap());
+            assert_eq!(actual.i16().unwrap(), 2);
+            assert_eq!(expected.i16().unwrap(), 2);
+            assert_eq!(actual.i8().unwrap(), expected.i8().unwrap());
+            assert_eq!(actual.i16().unwrap(), expected.i16().unwrap());
+            assert_eq!(actual.varint().unwrap(), expected.varint().unwrap());
+            let output = read_slot(&mut actual).unwrap().unwrap();
+            assert_eq!(Some(output.clone()), read_slot(&mut expected).unwrap());
+            assert!(output.added.contains(&(
+                crate::item::component::DAMAGE,
+                crate::item::Component::Int(37)
+            )));
+            let mut named = Writer::new();
+            write_slot(&Some(output.clone()), &mut named).unwrap();
+            let mut named = Reader::new(&named.data);
+            assert!(named.bool().unwrap());
+            named.varint().unwrap();
+            named.i8().unwrap();
+            let tag = named.named_nbt().unwrap();
+            assert_eq!(tag.get("BaseOnly"), Some(&Tag::Int(42)));
+            assert_eq!(tag.get("RepairCost"), Some(&Tag::Int(5)));
+            assert_eq!(
+                tag.get("display").and_then(|v| v.get("Name")),
+                Some(&Tag::String(r#"{"text":"Synthetic sword"}"#.into()))
+            );
+            assert!(actual.remaining() == 0 && expected.remaining() == 0);
+            assert!(inventory.active().slots[0].is_none() && inventory.active().slots[2].is_none());
+            assert_eq!(inventory.active().slots[1].as_ref().unwrap().count, 4);
+        });
+    }
+    #[test]
+    fn current_slot_boundaries_and_outside_click_map_to_source_without_shifting_buttons() {
+        for (current, source) in [(1, 0), (2, 1), (3, 2), (4, 3), (39, 38), (-999, -999)] {
+            with_inventory(|inventory| {
+                let wire = click(inventory, current, 4, vec![(0, None)], None)
+                    .0
+                    .unwrap();
+                let mut r = Reader::new(&wire);
+                assert_eq!(r.varint().unwrap(), 9);
+                assert_eq!(r.u8().unwrap(), 7);
+                assert_eq!(r.i16().unwrap(), source);
+                assert_eq!(r.i8().unwrap(), 0);
+                assert_eq!(r.i16().unwrap(), 1);
+            });
+        }
+    }
+    #[test]
+    fn invalid_template_or_prediction_rejects_the_whole_action_without_consuming_transaction() {
+        for (slot, changed) in [
+            (0, vec![]),
+            (40, vec![]),
+            (-998, vec![]),
+            (
+                4,
+                vec![(4, None), (0, Some(hash(&item("minecraft:diamond", 1))))],
+            ),
+            (4, vec![(4, None), (40, None)]),
+            (4, vec![(-1, None)]),
+        ] {
+            with_inventory(|inventory| {
+                let before = inventory.active().slots.clone();
+                let state = inventory.active().state;
+                let (wire, corrections, rejected) = click(inventory, slot, 0, changed, None);
+                assert!(wire.is_none() && rejected);
+                let play::Clientbound::ContainerSetContent(content) = &corrections[0] else {
+                    panic!()
+                };
+                assert_eq!(content.items[1..], before);
+                assert!(content.items[0].is_none());
+                assert_eq!(content.state, state);
+                let wire = click(inventory, 4, 4, vec![], None).0.unwrap();
+                let mut r = Reader::new(&wire);
+                r.varint().unwrap();
+                r.u8().unwrap();
+                r.i16().unwrap();
+                r.i8().unwrap();
+                assert_eq!(r.i16().unwrap(), 1);
+            });
+        }
+    }
+    #[test]
+    fn smithing_rejection_retains_newer_updates_and_waits_for_both_resync_halves() {
+        for cursor_first in [false, true] {
+            with_inventory(|inventory| {
+                assert!(take_result(inventory).0.is_some());
+                let slots = set_slot(inventory, 7, 1, Some(item("minecraft:netherite_ingot", 2)));
+                assert!(matches!(&slots[0], play::Clientbound::ContainerSetSlot(p) if p.slot == 2));
+                set_slot(inventory, -1, -1, Some(item("minecraft:diamond", 3)));
+                let mut w = Writer::new();
+                w.u8(7);
+                w.i16(1);
+                w.bool(false);
+                let (corrections, ack) = inventory.clientbound(17, &w.data).unwrap().unwrap();
+                assert_eq!(ack, vec![vec![7, 7, 0, 1, 1]]);
+                let play::Clientbound::ContainerSetContent(content) = &corrections[0] else {
+                    panic!()
+                };
+                assert_eq!(content.items[2].as_ref().unwrap().count, 2);
+                assert_eq!(content.carried.as_ref().unwrap().count, 3);
+                if cursor_first {
+                    set_slot(inventory, -1, -1, None);
+                } else {
+                    inventory.clientbound(19, &bytes(CONTENT)).unwrap();
+                }
+                assert!(click(inventory, 4, 4, vec![], None).2);
+                if cursor_first {
+                    inventory.clientbound(19, &bytes(CONTENT)).unwrap();
+                } else {
+                    set_slot(inventory, -1, -1, None);
+                }
+                assert!(click(inventory, 4, 4, vec![], None).0.is_some());
+            });
+        }
+    }
+    #[test]
+    fn closing_smithing_and_opening_another_menu_restores_identity_mapping() {
+        with_inventory(|inventory| {
+            assert!(click(inventory, 4, 4, vec![], None).0.is_some());
+            let (id, payload) = packet(
+                play::Serverbound::ContainerClose(play::ContainerClose { container: 7 }).encode(),
+            );
+            inventory.serverbound(id, &payload).unwrap();
+            open(inventory, 8, 0);
+            let mut ack = Writer::new();
+            ack.u8(7);
+            ack.i16(1);
+            ack.bool(false);
+            assert!(
+                inventory
+                    .clientbound(17, &ack.data)
+                    .unwrap()
+                    .unwrap()
+                    .0
+                    .is_empty()
+            );
+            let mut w = Writer::new();
+            w.u8(8);
+            w.i16(45);
+            for i in 0..45 {
+                write_slot(
+                    &if i == 0 {
+                        Some(item("minecraft:diamond", 1))
+                    } else {
+                        None
+                    },
+                    &mut w,
+                )
+                .unwrap();
+            }
+            let packets = inventory.clientbound(19, &w.data).unwrap().unwrap().0;
+            let play::Clientbound::ContainerSetContent(content) = &packets[0] else {
+                panic!()
+            };
+            assert_eq!(content.items.len(), 45);
+            assert!(content.items[0].is_some());
+            let wire = click(inventory, 0, 4, vec![], None).0.unwrap();
+            let mut r = Reader::new(&wire);
+            r.varint().unwrap();
+            r.u8().unwrap();
+            assert_eq!(r.i16().unwrap(), 0);
+        });
+    }
+
+    #[test]
+    fn no_op_quick_moves_return_empty_instead_of_forcing_a_rejected_transaction() {
+        for slot in [2, 3, 4] {
+            with_inventory(|inventory| {
+                inventory.active_mut().slots[3..].fill(Some(item("minecraft:dirt", 64)));
+                let wire = click(inventory, slot, 1, vec![], None).0.unwrap();
+                let mut r = Reader::new(&wire);
+                assert_eq!(r.varint().unwrap(), 9);
+                assert_eq!(r.u8().unwrap(), 7);
+                assert_eq!(r.i16().unwrap(), slot - 1);
+                r.i8().unwrap();
+                let action = r.i16().unwrap();
+                assert_eq!(r.varint().unwrap(), 1);
+                assert!(read_slot(&mut r).unwrap().is_none());
+                assert_eq!(r.remaining(), 0);
+                let mut ack = Writer::new();
+                ack.u8(7);
+                ack.i16(action);
+                ack.bool(true);
+                assert!(
+                    inventory
+                        .clientbound(17, &ack.data)
+                        .unwrap()
+                        .unwrap()
+                        .0
+                        .is_empty()
+                );
+                assert!(inventory.waiting.is_none());
+            });
         }
     }
 }

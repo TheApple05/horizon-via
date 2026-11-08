@@ -20,7 +20,7 @@
     {
       "path": "crates/horizon-client/src/game.rs",
       "before_sha256": "bcaefc73fd347bcb0558f332887c440e01a8bca2fdc6a2b630bfa41fd7bd1db0",
-      "after_sha256": "9f1c4e1e50ec015f89f0cb1dca28abe14f73ed40b4a5f210e2b568f8f0726aa5"
+      "after_sha256": "99aae698af3a531c7702da33ef2a6581a4cd27df23e0ba5f154943334f04c1b2"
     },
     {
       "path": "crates/horizon-client/src/game/control.rs",
@@ -35,7 +35,7 @@
     {
       "path": "crates/horizon-client/src/game/remote.rs",
       "before_sha256": "0afe5ba97458ea0b5f53966ae607cc0877702f11ee2c7e9ce22d65ad5c47433d",
-      "after_sha256": "ca3f253e3d23d45f94cee67d17878ca1447ac811d4886b991db9cb692c74af93"
+      "after_sha256": "612e5eede2100dc928dabc7fe98e162555e53523969844739acd3e0969bcde42"
     },
     {
       "path": "crates/horizon-client/src/game/remote_chat.rs",
@@ -46,6 +46,16 @@
       "path": "crates/horizon-client/src/game/remote_projectiles.rs",
       "before_sha256": "ccc77b79ef5ee68cd6dcf22b33c0eeb48c66d012ab3306c85003a5ed0f39b24e",
       "after_sha256": "ecf07b3393952b6f075fa7f319615a3397cac0f941203c1045f433d99ed43ae2"
+    },
+    {
+      "path": "crates/horizon-client/src/game/remote_stations.rs",
+      "before_sha256": "f12d48e276542fe297c7e88f3608a338eea0c0cf96b6af25b7558686b7452a8c",
+      "after_sha256": "96382a6fab78c755c48b6db040b52638ed3df668898a9068f76e7b1191317823"
+    },
+    {
+      "path": "crates/horizon-client/src/game/stations.rs",
+      "before_sha256": "8cd1036e26afaf1e215ed5485688ef407d0b1cf48aa695f748afe95be4f18b14",
+      "after_sha256": "2b7b53093bb282e89b2f21ab802de09f78e7cf36c65010e4a9f331c1e1c70ccf"
     },
     {
       "path": "crates/horizon-client/src/item_sync.rs",
@@ -61,6 +71,11 @@
       "path": "crates/horizon-client/src/legacy47_flight.rs",
       "before_sha256": null,
       "after_sha256": "a996116ea2fcfcd1c5ddca037cc133295841ad241d2a8da361d7e0aa2d774276"
+    },
+    {
+      "path": "crates/horizon-client/src/menu.rs",
+      "before_sha256": "083335b10e38232406e2a4e2a1b356462726a5e52cd6747ace3d282bf20ca0b5",
+      "after_sha256": "475d3407617b8c59789408c9357ff4efaa2a44c8f1180ee29119f77b0dd1e338"
     },
     {
       "path": "crates/horizon-client/src/multiplayer.rs",
@@ -320,7 +335,7 @@
     {
       "path": "crates/horizon-protocol/src/adapter/v1_16_5/inventory.rs",
       "before_sha256": null,
-      "after_sha256": "04d298d62e277b989b664820feeadddb74d899960f080a2a3bf51b5a16107206"
+      "after_sha256": "4a1ec405ef86f8f3fac706aa68ee5362d1626f21975c5838256593b16b5df11f"
     },
     {
       "path": "crates/horizon-protocol/src/adapter/v1_16_5/mod.rs",
@@ -350,7 +365,7 @@
     {
       "path": "crates/horizon-protocol/src/adapter/v1_16_5/worldfx.rs",
       "before_sha256": null,
-      "after_sha256": "22f20f07b2679b377eac8e9e9fcd08877c1cfd419fe5fc82b57146ba371d51a7"
+      "after_sha256": "7940b9ab8040f87ae816a60380fcc3ea6b2c5853444c56039151ff36b4ff7344"
     },
     {
       "path": "crates/horizon-protocol/src/adapter/v1_16_5/worldfx_goldens.rs",
