@@ -253,6 +253,7 @@ fn allowed(path: &str) -> bool {
                 | "crates/horizon-client-render/src/particles.rs"
                 | "crates/horizon-client/src/game/lan_particles.rs"
                 | "crates/horizon-client/src/game/remote.rs"
+                | "crates/horizon-client/src/game/server_packs.rs"
                 | "crates/horizon-client/src/game/remote_chat.rs"
                 | "crates/horizon-client/src/lan/io_pool.rs"
                 | "crates/horizon-client/src/item_sync.rs"

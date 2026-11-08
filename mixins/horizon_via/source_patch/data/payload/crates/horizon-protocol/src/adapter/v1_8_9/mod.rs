@@ -143,7 +143,6 @@ pub fn login_finished(payload: &[u8]) -> Result<Vec<u8>> {
 pub struct State {
     next_teleport: i32,
     pending_teleports: BTreeSet<i32>,
-    resource_hash: Option<String>,
 }
 impl State {
     /// Generate consumer-only IDs. A1.8server has no teleport-confirm packet.
@@ -186,35 +185,71 @@ impl State {
         }
         Ok(())
     }
-    pub fn resource_pack(&mut self, payload: &[u8]) -> Result<Vec<u8>> {
-        let mut r = Reader::new(payload);
-        let url = r.string(32767)?;
-        let hash = r.string(40)?;
-        finish(&r)?;
-        let mut w = Writer::new();
-        w.string(&url);
-        w.string(&hash);
-        //1.17+force+optionalprompt; neither exists on the old wire.
-        w.bool(false);
-        w.bool(false);
-        self.resource_hash = Some(hash);
-        Ok(w.data)
-    }
-    pub fn resource_status(&self, payload: &[u8]) -> Result<Vec<u8>> {
-        let mut r = Reader::new(payload);
-        let status = r.varint()?;
-        finish(&r)?;
-        if !(0..=3).contains(&status) {
-            return Err(Error::new("status has no legacy representation"));
+}
+
+/// Both old protocols have one pack slot. Native replies carry the request identity
+/// so delayed feedback for a superseded request cannot acquire the replacement's hash.
+#[derive(Default)]
+pub(super) struct LegacyPackSlot {
+    current: Option<(u128, String)>,
+}
+
+impl LegacyPackSlot {
+    pub(super) fn request(
+        &mut self,
+        url: String,
+        hash: String,
+        echo_hash: bool,
+    ) -> std::result::Result<crate::packets::configuration::ResourcePackPush, Vec<u8>> {
+        if !super::valid_resource_pack_url(&url) {
+            // The native client rejects these schemes before changing its prompt or active pack.
+            let mut w = Writer::new();
+            if echo_hash {
+                w.string(&hash);
+            }
+            w.varint(2);
+            return Err(w.data);
         }
-        let hash = self
-            .resource_hash
-            .as_ref()
-            .ok_or_else(|| Error::new("resource status without legacy request"))?;
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        let id = u128::from(NEXT.fetch_add(1, Ordering::Relaxed));
+        self.current = Some((id, hash.clone()));
+        Ok(crate::packets::configuration::ResourcePackPush {
+            id,
+            url,
+            hash,
+            required: false,
+            prompt: None,
+        })
+    }
+
+    pub(super) fn status(
+        &mut self,
+        id: u128,
+        action: i32,
+        echo_hash: bool,
+    ) -> Result<Option<Vec<u8>>> {
+        let Some((current_id, hash)) = &self.current else {
+            return Ok(None);
+        };
+        if *current_id != id {
+            return Ok(None);
+        }
+        let status = match action {
+            0..=3 => action,
+            5 | 6 => 2, // invalid URL or failed reload is a failed download in the old protocol
+            4 | 7 => return Ok(None), // downloaded and discarded have no wire representation
+            _ => return Err(Error::new("invalid resource pack action")),
+        };
         let mut w = Writer::new();
-        w.string(hash);
+        if echo_hash {
+            w.string(hash)
+        }
         w.varint(status);
-        Ok(w.data)
+        if status != 3 {
+            self.current = None;
+        }
+        Ok(Some(w.data))
     }
 }
 
@@ -282,4 +317,51 @@ pub fn entity_move(payload: &[u8], look: bool) -> Result<Vec<u8>> {
     }
     w.bool(ground);
     Ok(w.data)
+}
+
+#[cfg(test)]
+mod pack_tests {
+    use super::*;
+
+    #[test]
+    fn superseded_requests_never_write_statuses_for_the_replacement() {
+        for echo_hash in [true, false] {
+            let mut slot = LegacyPackSlot::default();
+            let a = slot
+                .request("https://packs/a".into(), "hash-a".into(), echo_hash)
+                .unwrap();
+            let b = slot
+                .request("https://packs/b".into(), "hash-b".into(), echo_hash)
+                .unwrap();
+            let again = slot
+                .request(a.url.clone(), a.hash.clone(), echo_hash)
+                .unwrap();
+            let invalid = slot
+                .request("ftp://test/pack".into(), "bad-hash".into(), echo_hash)
+                .unwrap_err();
+            let mut invalid = Reader::new(&invalid);
+            if echo_hash {
+                assert_eq!(invalid.string(40).unwrap(), "bad-hash");
+            }
+            assert_eq!(invalid.varint().unwrap(), 2);
+            assert_eq!(invalid.remaining(), 0);
+            assert_ne!(again.id, a.id);
+            for previous in [a.id, b.id] {
+                for status in [3, 4, 0, 2, 5, 6, 7] {
+                    assert_eq!(slot.status(previous, status, echo_hash).unwrap(), None);
+                }
+            }
+            assert_eq!(slot.status(again.id, 7, echo_hash).unwrap(), None);
+            for (native, wire) in [(3, 3), (5, 2)] {
+                let raw = slot.status(again.id, native, echo_hash).unwrap().unwrap();
+                let mut r = Reader::new(&raw);
+                if echo_hash {
+                    assert_eq!(r.string(40).unwrap(), "hash-a");
+                }
+                assert_eq!(r.varint().unwrap(), wire);
+                assert_eq!(r.remaining(), 0);
+            }
+            assert_eq!(slot.status(again.id, 0, echo_hash).unwrap(), None);
+        }
+    }
 }

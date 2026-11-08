@@ -39,12 +39,7 @@ impl Prompt {
     }
 }
 
-/// `ClientCommonPacketListenerImpl.parseResourcePackUrl`: only http and https.
-pub fn valid_url(url: &str) -> bool {
-    url.split_once(':').is_some_and(|(scheme, _)| {
-        scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https")
-    })
-}
+pub use horizon_protocol::adapter::valid_resource_pack_url as valid_url;
 
 /// `DownloadedPackSource.tryParseSha1Hash`: 40 hex digits, else no check.
 pub fn parse_sha1(hash: &str) -> Option<String> {
@@ -119,6 +114,7 @@ struct Generation(u64);
 /// `ServerPackManager.ServerPackData`.
 #[derive(Debug)]
 struct Pack {
+    single_slot: bool,
     generation: Generation,
     id: u128,
     url: String,
@@ -155,7 +151,7 @@ pub struct ServerPacks {
     next_generation: u64,
     /// The native download queue completes batches in request order. Retain each batch's
     /// pack identities even after replacement/disconnect removes those packs from `packs`.
-    downloads: VecDeque<Vec<(u128, Generation)>>,
+    downloads: VecDeque<Vec<(u128, Generation, bool)>>,
     prompt: Prompt,
     reload: Option<Reload>,
     /// `registerForUpdate`: something changed, [`Self::tick`] again.
@@ -228,15 +224,29 @@ impl ServerPacks {
     }
 
     pub fn push(&mut self, id: u128, url: &str, sha1: Option<String>) {
+        self.push_download(id, url, sha1, false);
+    }
+
+    /// Java 1.8.9/1.12.2 replace their one accepted server pack even when its URL changes.
+    pub fn push_single(&mut self, id: u128, url: &str, sha1: Option<String>) {
+        self.push_download(id, url, sha1, true);
+    }
+
+    fn push_download(&mut self, id: u128, url: &str, sha1: Option<String>, single_slot: bool) {
         if self.prompt == Prompt::Declined {
             self.report(id, action::DECLINED);
             return;
         }
-        for pack in self.packs.iter_mut().filter(|p| p.id == id) {
+        for pack in self
+            .packs
+            .iter_mut()
+            .filter(|p| p.id == id || (single_slot && p.single_slot))
+        {
             pack.remove(Removal::ServerReplaced);
         }
         let generation = self.generation();
         self.packs.push(Pack {
+            single_slot,
             generation,
             id,
             url: url.to_owned(),
@@ -264,6 +274,7 @@ impl ServerPacks {
         }
         let generation = self.generation();
         self.packs.push(Pack {
+            single_slot: false,
             generation,
             id,
             // Never downloaded: the file is already on disk.
@@ -332,7 +343,7 @@ impl ServerPacks {
             downloading |= pack.download != Download::Done;
             if pack.download == Download::Requested {
                 pack.download = Download::Pending;
-                requested.push((pack.id, pack.generation));
+                requested.push((pack.id, pack.generation, pack.single_slot));
                 out.download.push(Request {
                     id: pack.id,
                     url: pack.url.clone(),
@@ -343,7 +354,12 @@ impl ServerPacks {
         if !requested.is_empty() {
             self.downloads.push_back(requested);
         }
-        if !downloading {
+        if !downloading
+            || self
+                .packs
+                .iter()
+                .any(|p| p.single_slot && p.removed() && p.activation == Activation::Active)
+        {
             out.reload = self.reload_if_needed();
         }
         let mut gone = Vec::new();
@@ -419,12 +435,22 @@ impl ServerPacks {
         let Some(requested) = self.downloads.pop_front() else {
             return;
         };
-        if !batch.failed.is_empty() {
-            for pack in self
-                .packs
-                .iter_mut()
-                .filter(|p| p.activation != Activation::Active)
-            {
+        // A retired legacy download can finish after the replacement has started.
+        // Only a current legacy failure can cancel its pack. Modern stacked batches
+        // retain their usual all-or-nothing failure rule.
+        let failed_current = requested.iter().any(|(id, generation, single)| {
+            batch.failed.contains(id)
+                && (!single
+                    || self
+                        .packs
+                        .iter()
+                        .any(|p| p.generation == *generation && !p.removed()))
+        });
+        if failed_current {
+            for pack in self.packs.iter_mut().filter(|p| {
+                p.activation != Activation::Active
+                    && (!p.single_slot || requested.iter().any(|(_, g, _)| *g == p.generation))
+            }) {
                 pack.remove(if batch.failed.contains(&pack.id) {
                     Removal::DownloadFailed
                 } else {
@@ -434,7 +460,8 @@ impl ServerPacks {
         }
         let mut done = Vec::new();
         for (id, path) in batch.downloaded {
-            let Some((_, generation)) = requested.iter().find(|(requested, _)| *requested == id)
+            let Some((_, generation, _)) =
+                requested.iter().find(|(requested, _, _)| *requested == id)
             else {
                 continue;
             };
@@ -492,6 +519,7 @@ impl ServerPacks {
         reload.load.clear();
         for pack in &mut self.packs {
             match pack.activation {
+                Activation::Inactive if pack.single_slot => {} // A newer request can arrive during the old reload.
                 Activation::Inactive => pack.remove(Removal::Discarded),
                 Activation::Pending => {
                     pack.activation = Activation::Inactive;
@@ -793,6 +821,70 @@ mod tests {
         assert!(sp.packs.is_empty());
         assert!(sp.downloads.is_empty());
         assert!(sp.take_replies().is_empty());
+    }
+
+    #[test]
+    fn a_failed_old_single_slot_download_cannot_cancel_its_replacement() {
+        let mut sp = ServerPacks::default();
+        sp.connect(Prompt::Allowed);
+        sp.push_single(11, "https://test/a", None);
+        assert_eq!(sp.tick().download[0].id, 11);
+        sp.push_single(12, "https://test/b", None);
+        assert_eq!(sp.tick().download[0].id, 12);
+        sp.downloaded(Batch {
+            downloaded: vec![],
+            failed: vec![11],
+        });
+        assert!(sp.tick().reload.is_none());
+        sp.downloaded(ok(12));
+        assert_eq!(sp.tick().reload, Some(vec![(12, PathBuf::from("/p/12"))]));
+        sp.reloaded(true);
+        sp.tick();
+        assert_eq!(
+            sp.take_replies(),
+            [
+                (11, ACCEPTED),
+                (12, ACCEPTED),
+                (12, DOWNLOADED),
+                (12, SUCCESSFULLY_LOADED)
+            ]
+        );
+        sp.reject();
+        sp.push_single(13, "https://test/declined", None);
+        assert!(sp.tick().reload.is_none());
+        assert_eq!(sp.take_replies(), [(13, DECLINED)]);
+        sp.allow();
+        sp.push_single(14, "https://test/bad", None);
+        let tick = sp.tick();
+        assert_eq!(tick.download[0].id, 14);
+        assert_eq!(tick.reload, Some(vec![]));
+        sp.reloaded(true);
+        sp.downloaded(Batch {
+            downloaded: vec![],
+            failed: vec![14],
+        });
+        sp.tick();
+        assert_eq!(sp.take_replies(), [(14, ACCEPTED), (14, FAILED_DOWNLOAD)]);
+        assert!(sp.packs.is_empty());
+    }
+
+    #[test]
+    fn failed_single_slot_reload_leaves_later_request_pending() {
+        let mut sp = ServerPacks::default();
+        sp.connect(Prompt::Allowed);
+        sp.push_single(1, "https://test/a", None);
+        sp.tick();
+        sp.downloaded(ok(1));
+        assert!(sp.tick().reload.is_some());
+        sp.push_single(2, "https://test/b", None);
+        sp.tick();
+        assert_eq!(sp.reloaded(false), Some(vec![]));
+        sp.reloaded(true);
+        sp.downloaded(ok(2));
+        assert_eq!(sp.tick().reload, Some(vec![(2, PathBuf::from("/p/2"))]));
+        sp.reloaded(true);
+        sp.tick();
+        assert!(sp.take_replies().contains(&(2, SUCCESSFULLY_LOADED)));
     }
 
     #[test]

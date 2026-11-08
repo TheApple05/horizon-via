@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.2 — candidate
+
+- Route Java 1.16.5 minecart clicks to the ordinary interaction and preserve armor-stand hit positions.
+- Preserve motion on relative axes when a 1.16.5 server corrects the player's position.
+- Stop a connection when a packet translation fails instead of decoding rejected legacy bytes as a native packet.
+- Replace the single legacy server resource pack on 1.8.9 and 1.12.2, including successive requests and late download replies.
+
 ## 0.4.1 — experimental
 
 - Support Java 1.16.5 smithing with two visible inputs and no upgrade template.

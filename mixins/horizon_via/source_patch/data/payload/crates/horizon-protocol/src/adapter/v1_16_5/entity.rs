@@ -55,6 +55,13 @@ fn item(name: &str) -> Result<crate::item::Stack> {
 }
 
 impl Entities {
+    pub(super) fn needs_interaction_point(&self, id: i32) -> bool {
+        self.entities
+            .get(&id)
+            .and_then(|entity| tables::ENTITY_NAMES.get(entity.source))
+            == Some(&"minecraft:armor_stand")
+    }
+
     pub(super) fn clear(&mut self) {
         self.entities.clear();
         self.acceleration.clear();

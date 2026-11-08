@@ -205,6 +205,17 @@ impl Session {
         let Some(pinned) = self.version.clientbound_id(state, id) else {
             return Ok(None);
         };
+        if state == State::Play && pinned == ids::play::clientbound::LOGIN {
+            self.set_legacy_secure_chat_enforcement(None);
+        }
+        let translated = translate::clientbound(self, state, pinned, &payload)
+            .map_err(|error| {
+                crate::Error::new(format!(
+                    "{} {state:?} clientbound {id:#x}: {error}",
+                    self.version.name()
+                ))
+            })?
+            .map(|(id, converted)| (id, converted.unwrap_or(payload)));
         match (state, pinned) {
             (State::Login, ids::login::clientbound::LOGIN_FINISHED) => {
                 if self.version == ServerVersion::V1_20_1 {
@@ -219,25 +230,8 @@ impl Session {
                 self.set_legacy_secure_chat_enforcement(None);
                 self.set_reading(State::Configuration)
             }
-            (State::Play, ids::play::clientbound::LOGIN) => {
-                self.set_legacy_secure_chat_enforcement(None);
-            }
             _ => {}
         }
-        // A packet the translation can't read goes on as it came, as an unknown packet would: Horizon's
-        // own reader then skips it or reports it, rather than the connection dropping here.
-        let translated = match translate::clientbound(self, state, pinned, &payload) {
-            Ok(Some((id, Some(translated)))) => Some((id, translated)),
-            Ok(Some((id, None))) => Some((id, payload)),
-            Ok(None) => None,
-            Err(e) => {
-                log::warn!(
-                    "Horizon: could not translate {} packet {pinned} ({state:?}): {e}",
-                    self.version.name()
-                );
-                Some((pinned, payload))
-            }
-        };
         if state == State::Login
             && let Some((id, payload)) = &translated
             && let Ok(crate::packets::login::Clientbound::Hello(hello)) =
@@ -567,11 +561,13 @@ mod tests {
         s.set_reading(State::Play);
         s.set_legacy_secure_chat_enforcement(Some(true));
         // Reset belongs to the login boundary even if a malformed body cannot be translated.
-        s.clientbound(
-            old_play_id(s.version, ids::play::clientbound::LOGIN),
-            vec![],
-        )
-        .unwrap();
+        assert!(
+            s.clientbound(
+                old_play_id(s.version, ids::play::clientbound::LOGIN),
+                vec![],
+            )
+            .is_err()
+        );
         assert_eq!(s.legacy_secure_chat_enforcement(), None);
         assert_eq!(
             Session::new(ServerVersion::Current).legacy_secure_chat_enforcement(),
@@ -629,6 +625,21 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(s.writing(), State::Play);
+    }
+
+    #[test]
+    fn rejected_legacy_teleport_cannot_be_dispatched_as_a_native_packet() {
+        use crate::packets::play;
+        let s = Session::new(ServerVersion::V1_21_1);
+        s.set_reading(State::Play);
+        // This is a valid native teleport but has trailing bytes in protocol 767.
+        let payload = vec![0; 61];
+        assert!(matches!(
+            play::Clientbound::decode(ids::play::clientbound::PLAYER_POSITION, &payload),
+            Ok(play::Clientbound::PlayerPosition(_))
+        ));
+        assert!(s.clientbound(0x40, payload).is_err());
+        assert!(s.next_incoming().is_none());
     }
 
     #[test]

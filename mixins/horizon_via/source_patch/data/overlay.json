@@ -53,6 +53,11 @@
       "after_sha256": "96382a6fab78c755c48b6db040b52638ed3df668898a9068f76e7b1191317823"
     },
     {
+      "path": "crates/horizon-client/src/game/server_packs.rs",
+      "before_sha256": "256efc8ff9ca6a95ff512b0edce3e36b09574363c0f148217a3b96be4ceeeb24",
+      "after_sha256": "d58a50b0bd9cecb60b3185933543b66943893536508cf94b8e79bda576d44401"
+    },
+    {
       "path": "crates/horizon-client/src/game/stations.rs",
       "before_sha256": "8cd1036e26afaf1e215ed5485688ef407d0b1cf48aa695f748afe95be4f18b14",
       "after_sha256": "2b7b53093bb282e89b2f21ab802de09f78e7cf36c65010e4a9f331c1e1c70ccf"
@@ -100,7 +105,7 @@
     {
       "path": "crates/horizon-client/src/server_packs.rs",
       "before_sha256": "4c5a4c847b472f03ca0c201c4e2c9d1bf49a50ec8c8d6347484f7120571267a4",
-      "after_sha256": "92708bfa28321d2bca3361c9ad2c99b4b7b46e8133f2e1d8da7fc2fad5595405"
+      "after_sha256": "90161974854ead365e6976b49d975cfa35c8f13c1a8ba75ece33800b10982795"
     },
     {
       "path": "crates/horizon-client/src/title.rs",
@@ -115,7 +120,7 @@
     {
       "path": "crates/horizon-protocol/src/adapter.rs",
       "before_sha256": "1cac1a3fb974df487c1b3ba3d1e3ad1fa78f648c12db9e9c0962369e749fc5e6",
-      "after_sha256": "4e4dd14cc61336d1f8b30d1ee38a695f29e309ec1756d659ec2569e268f73483"
+      "after_sha256": "abf1494acce1ba06cab110683f52cf8583d74663fda326de1c294c0aeaf9f8e3"
     },
     {
       "path": "crates/horizon-protocol/src/adapter/ids.rs",
@@ -135,7 +140,7 @@
     {
       "path": "crates/horizon-protocol/src/adapter/session.rs",
       "before_sha256": "65ae521351b33c886c562c9ff1513cd3ee35436975213b59507b7edc261c9f0f",
-      "after_sha256": "c1106699371975235197936607279ef8a8710534a08d522c64e6d16b58ea7c20"
+      "after_sha256": "dbe3d6057d5448b3fa6ad39453eb4240f6f51c1020e0c5197e59d6a92e4fe036"
     },
     {
       "path": "crates/horizon-protocol/src/adapter/session/pre_configuration.rs",
@@ -210,7 +215,7 @@
     {
       "path": "crates/horizon-protocol/src/adapter/v1_12_2/bridge.rs",
       "before_sha256": null,
-      "after_sha256": "2a57e057e2ed12416ea7b73e0ef053f7cf65348ac732a5e6ed42e59090b62b2f"
+      "after_sha256": "8206b9a3f0a5c68e0d1227731b112337dbed0854152bc24ad2edc75ee112fb43"
     },
     {
       "path": "crates/horizon-protocol/src/adapter/v1_12_2/context_connections.rs",
@@ -325,7 +330,7 @@
     {
       "path": "crates/horizon-protocol/src/adapter/v1_16_5/entity.rs",
       "before_sha256": null,
-      "after_sha256": "da42fd83d021d786228259b17beaf5dfc54ea613d7494e0b511a0053423135cd"
+      "after_sha256": "9ebd138858b8464c4d3020486936a4c7b00b882466a63badf34bd2dd44c3786f"
     },
     {
       "path": "crates/horizon-protocol/src/adapter/v1_16_5/fixtures.rs",
@@ -340,7 +345,7 @@
     {
       "path": "crates/horizon-protocol/src/adapter/v1_16_5/mod.rs",
       "before_sha256": null,
-      "after_sha256": "f24c66420ac55de0a4cf424aad5fec5030dbaa2babf76c93b2c3b4b5013213ad"
+      "after_sha256": "67fd88c82486383debb184651041544e22ac0d892c9ce18ccb9d4e3abfe75ff1"
     },
     {
       "path": "crates/horizon-protocol/src/adapter/v1_16_5/runtime_fields.rs",
@@ -480,7 +485,7 @@
     {
       "path": "crates/horizon-protocol/src/adapter/v1_8_9/bridge.rs",
       "before_sha256": null,
-      "after_sha256": "cdeaaabfdd4b04fc1228a027015af68f2f6e8a459789d5a7d53cae1c84f1ce18"
+      "after_sha256": "c89fbbb2df5823ece83ec238166f0af233e494232b631664cd18bd83e476c9ee"
     },
     {
       "path": "crates/horizon-protocol/src/adapter/v1_8_9/bridge_tests.rs",
@@ -605,7 +610,7 @@
     {
       "path": "crates/horizon-protocol/src/adapter/v1_8_9/mod.rs",
       "before_sha256": null,
-      "after_sha256": "9df248e493370cf175745b11f8845beb610ca3785bb6e985bcfeb79005d2ee97"
+      "after_sha256": "64eb7a9f484e40c4d4162c607d2ac230ffeab7d811b915e3aff2a43d2445bb2e"
     },
     {
       "path": "crates/horizon-protocol/src/adapter/v1_8_9/neighbors47.rs",

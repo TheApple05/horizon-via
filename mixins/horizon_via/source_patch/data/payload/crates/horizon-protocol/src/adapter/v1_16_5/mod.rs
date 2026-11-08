@@ -484,7 +484,8 @@ impl Bridge {
                 let position = crate::buf::Vec3d::read(&mut r)?;
                 let yaw = r.f32()?;
                 let pitch = r.f32()?;
-                let relatives = i32::from(r.u8()?);
+                // The 1.16.5 client keeps its velocity only on relative position axes.
+                let flags = i32::from(r.u8()?) & 0x1f;
                 let teleport = r.varint()?;
                 out.push(C::PlayerPosition(play::PlayerPosition {
                     teleport,
@@ -492,7 +493,7 @@ impl Bridge {
                     delta: [0.0; 3],
                     yaw,
                     pitch,
-                    relatives,
+                    relatives: flags | ((flags & 7) << 5),
                 }));
             }
             56 => {
@@ -745,9 +746,15 @@ impl Bridge {
                             return Err(Error::new("invalid old entity interaction"));
                         }
                         w.varint(p.id);
-                        w.varint(2);
-                        for x in p.location {
-                            w.f32(x as f32);
+                        // ArmorStand overrides interactAt. Other vanilla entities dispatch
+                        // a right click through the ordinary player interaction.
+                        if self.entities.needs_interaction_point(p.id) {
+                            w.varint(2);
+                            for x in p.location {
+                                w.f32(x as f32);
+                            }
+                        } else {
+                            w.varint(0);
                         }
                         w.varint(p.hand);
                         w.bool(p.secondary);
@@ -1522,6 +1529,73 @@ mod tests {
             assert!(bridge.take_predictions().is_empty());
         }
     }
+    #[test]
+    fn relative_teleports_keep_motion_only_on_relative_position_axes() {
+        let (id, mut body) = fixture("teleport_absolute");
+        for (old_flags, expected) in [(0, 0), (1, 33), (2, 66), (4, 132), (24, 24), (31, 255)] {
+            body[32] = old_flags;
+            let (packets, _) = Bridge::default().play(id, &body).unwrap();
+            let [play::Clientbound::PlayerPosition(p)] = packets.as_slice() else {
+                panic!("expected one player teleport");
+            };
+            assert_eq!((p.relatives, p.delta), (expected, [0.0; 3]));
+        }
+    }
+
+    #[test]
+    fn minecart_and_armor_stand_right_clicks_each_send_one_matching_action() {
+        let mut bridge = Bridge {
+            finished: true,
+            ..Default::default()
+        };
+        for (name, action) in [("minecraft:minecart", 0), ("minecraft:armor_stand", 2)] {
+            let kind = tables::ENTITY_NAMES
+                .iter()
+                .position(|v| *v == name)
+                .unwrap();
+            let mut spawn = Writer::new();
+            spawn.varint(42);
+            spawn.uuid(1);
+            spawn.varint(kind as i32);
+            spawn.bytes(&[0; 36]); // XYZ, rotation, object data and velocity.
+            bridge.play(0, &spawn.data).unwrap();
+
+            let (id, payload) = packet(
+                play::Serverbound::Interact(play::Interact {
+                    id: 42,
+                    hand: 1,
+                    location: [0.25, 1.0, -0.5],
+                    secondary: true,
+                })
+                .encode(),
+            );
+            let out = bridge.serverbound(State::Play, id, &payload).unwrap();
+            assert!(out.extra.is_empty());
+            let bytes = out.packet.unwrap();
+            let mut r = Reader::new(&bytes);
+            assert_eq!(
+                (
+                    r.varint().unwrap(),
+                    r.varint().unwrap(),
+                    r.varint().unwrap()
+                ),
+                (14, 42, action)
+            );
+            if action == 2 {
+                let point = [r.f32().unwrap(), r.f32().unwrap(), r.f32().unwrap()];
+                assert!(
+                    point
+                        .iter()
+                        .zip([0.25, 1.0, -0.5])
+                        .all(|(a, b)| (*a - b).abs() < 0.001)
+                );
+            }
+            assert_eq!(r.varint().unwrap(), 1);
+            assert!(r.bool().unwrap());
+            finish(&r).unwrap();
+        }
+    }
+
     #[test]
     fn teleport_confirmation_has_only_the_old_id_and_does_not_leak_native_coordinates() {
         let mut bridge = Bridge {

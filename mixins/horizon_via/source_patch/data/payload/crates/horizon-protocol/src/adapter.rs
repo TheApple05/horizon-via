@@ -5,6 +5,13 @@
 //! readers decode them, and `translate` rewrites the packets whose layout changed. An older version is
 //! translated a release at a time (26.1 to 26.2, then 26.2 to 26.3), with its ids mapped straight to the
 //! pinned ones.
+/// `ClientCommonPacketListenerImpl.parseResourcePackUrl`: only http and https.
+pub fn valid_resource_pack_url(url: &str) -> bool {
+    url.split_once(':').is_some_and(|(scheme, _)| {
+        scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https")
+    })
+}
+
 pub mod ids;
 mod legacy;
 mod native;
