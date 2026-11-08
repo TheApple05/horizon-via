@@ -181,6 +181,7 @@ pub(super) fn dimension_id(registries: &[cfg::RegistryData], dimension: &Tag) ->
 
 pub(super) fn upgrade_registries(registries: &mut [cfg::RegistryData]) {
     for registry in registries {
+        super::super::v1_8_9::bootstrap::upgrade_biomes(registry);
         for entry in &mut registry.entries {
             let Some(data) = &mut entry.data else {
                 continue;

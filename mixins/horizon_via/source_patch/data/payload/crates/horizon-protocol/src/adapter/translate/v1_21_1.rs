@@ -112,8 +112,8 @@ pub(super) fn clientbound(
                 crate::adapter::v1_20_2_ids::ITEM_NAMES
             } else if session.version.at_most(ServerVersion::V1_20_3) {
                 crate::adapter::v1_20_3_ids::ITEM_NAMES
-            } else if session.version.at_most(ServerVersion::V1_20_5) {
-                crate::adapter::v1_20_5_ids::ITEM_NAMES
+            } else if session.version.at_most(ServerVersion::V1_20_6) {
+                crate::adapter::v1_20_6_ids::ITEM_NAMES
             } else {
                 crate::adapter::v1_21_1_ids::ITEM_NAMES
             };
@@ -254,7 +254,7 @@ pub(super) fn explosion(session: &Session, payload: &[u8]) -> Result<Vec<u8>> {
         // explosions have different block-specific behavior and must not erase their blocks.
         let origin = center.map(|value| value.floor() as i32);
         let mut queued = session.incoming.lock().unwrap();
-        for offset in offsets.chunks_exact(3) {
+        for offset in offsets.as_chunks::<3>().0 {
             let pos = std::array::from_fn(|axis| {
                 origin[axis].wrapping_add(i32::from(offset[axis] as i8))
             });

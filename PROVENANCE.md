@@ -4,10 +4,12 @@ ViaHorizon is an independent native compatibility extension, not an official Via
 
 Releases 0.1.0 and 0.2.0 were published as Horizon Via. Their source references, release names and license credits remain historical records.
 
-- Base game for 0.2.0 through 0.4.0: Horizon at `d8edfbcd0f70aac5b41bab12b8bbf9cc3626de1f` (official horizon-rust/horizon, MIT).
+- Base game for 0.2.0 through 0.4.1: Horizon at `d8edfbcd0f70aac5b41bab12b8bbf9cc3626de1f` (official horizon-rust/horizon, MIT).
+- Base game for 0.5.0: official Horizon at `802a858cc1ff8a26a5d17424c51ad0f478c79099` (MIT), including the upstream older-server adapters and their subsequent fixes.
+- Native transformer for 0.5.0: official horizon-mixins at `5a64af938ec86b00d53d16a408aabc0038fb3e57` (MIT, levzzz), matching that Horizon launcher.
 - Compatibility source: TheApple05/horizon at `7dde5f518c3a24117bdb7b2f28797bef8a06d22d`, merged with the official base above (MIT). Earlier source contributions are historical references; new compatibility work is maintained in this independent mod.
 - Version picker and mod installation behavior: this project's 0.1.0 source at `1d905edfb783f63a07f9bba734409481d4efb64a`, retained independently of personal launcher/authentication work.
-- Official horizon-mixins at `e8cd0aa38cffef49cb2e088ef716baa107148c02` (MIT, levzzz).
+- Native transformer for 0.2.0 through 0.4.1: official horizon-mixins at `e8cd0aa38cffef49cb2e088ef716baa107148c02` (MIT, levzzz).
 - Generated protocol and registry maps were derived from independently inspected vanilla reports.
 - The original project inspected ViaFabricPlus README, LICENSE, AGENTS.md and build.gradle.kts metadata; no ViaFabricPlus or ViaVersion protocol/gameplay implementation was read or copied.
 - Selector code was independently implemented from a published screenshot and user documentation. No original mod assets are bundled.

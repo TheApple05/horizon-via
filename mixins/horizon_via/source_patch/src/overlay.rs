@@ -236,6 +236,7 @@ fn allowed(path: &str) -> bool {
                 | "crates/horizon-client/src/game/stations.rs"
                 | "crates/horizon-client-render/src/light.rs"
                 | "crates/horizon-client/src/game.rs"
+                | "crates/horizon-client/src/game/world_entry.rs"
                 | "crates/horizon-client/src/game/control.rs"
                 | "crates/horizon-client/src/game/remote_projectiles.rs"
                 | "crates/horizon-client/src/legacy47_flight.rs"
@@ -428,9 +429,10 @@ mod tests {
     const REVISION: &str = "d8edfbcd0f70aac5b41bab12b8bbf9cc3626de1f";
     const FIRST: &str = "crates/horizon-protocol/src/adapter.rs";
     const SECOND: &str = "crates/horizon-protocol/src/item/legacy.rs";
-    const EXTRA_RUNTIME: [&str; 7] = [
+    const EXTRA_RUNTIME: [&str; 8] = [
         "crates/horizon-client/src/game/lan_particles.rs",
         "crates/horizon-client/src/game/remote.rs",
+        "crates/horizon-client/src/game/world_entry.rs",
         "crates/horizon-client/src/game/remote_chat.rs",
         "crates/horizon-client/src/lan/io_pool.rs",
         "crates/horizon-client/src/server_packs.rs",

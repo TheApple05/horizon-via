@@ -153,6 +153,7 @@ impl Bridge {
                             ])),
                         });
                     }
+                    bootstrap::upgrade_biomes(&mut registry);
                     out.packets.push(bootstrap::packet(
                         cfg::Clientbound::RegistryData(registry).encode(),
                     ));

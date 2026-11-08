@@ -1,51 +1,36 @@
 {
   "schema": 1,
-  "horizon_revision": "d8edfbcd0f70aac5b41bab12b8bbf9cc3626de1f",
+  "horizon_revision": "802a858cc1ff8a26a5d17424c51ad0f478c79099",
   "files": [
     {
       "path": "crates/horizon-client-render/src/light.rs",
-      "before_sha256": "2fc964a223742ba9bf3ebe49cd6d488fbc68ace489388699346f6521507ed237",
-      "after_sha256": "4949d6ca2594b63c27168a1b0805386b4ef401a8d8cf4256afe71d9c21fcd085"
-    },
-    {
-      "path": "crates/horizon-client-render/src/particles.rs",
-      "before_sha256": "857a5a513e4a9a5ff68f1b7c96a98dc8709daa5a34f00906dab6c531f0f471b5",
-      "after_sha256": "553d656e59731b7e2bdf420a9fbf342b1a1ee30ae81fec5f708cda5818f54604"
+      "before_sha256": "e0fb3929a9dcc3bd5699a254023f1f94c99e2b85f8bb1facc7261c27922547c0",
+      "after_sha256": "244d157bc5481837a05fd47e6b25ab606b0fefe611a0389ec89386bb9793f5c1"
     },
     {
       "path": "crates/horizon-client/assets/horizon/lang/en_us.json",
-      "before_sha256": "8313a7e9cc82b82ad373c49a1d3f03852d3f633db7fb4da6077479984d3265c7",
-      "after_sha256": "6d6053bff69662614f6213e4380fa3dc1063c84d6de8d94059ef6d5f39650284"
+      "before_sha256": "4a365aa8cd11c3a15ce8b06a9c536f3ef7aeeac9f02651d1ba3e2588778ca292",
+      "after_sha256": "5d0bb69842e7897a397aa1c9f6f183df3fc62c0f1a82c6a44cc72d3208719767"
     },
     {
       "path": "crates/horizon-client/src/game.rs",
-      "before_sha256": "bcaefc73fd347bcb0558f332887c440e01a8bca2fdc6a2b630bfa41fd7bd1db0",
-      "after_sha256": "99aae698af3a531c7702da33ef2a6581a4cd27df23e0ba5f154943334f04c1b2"
+      "before_sha256": "c828b94d65351649bab35ea1e463e5e20052d2629b1215d9facb8df37748526c",
+      "after_sha256": "99a8cc22b442ef1c39de32d1ccc0a1022320925c3707633d07ec1631cdaf119c"
     },
     {
       "path": "crates/horizon-client/src/game/control.rs",
-      "before_sha256": "1090de21c792d0502f13b40d61016018debf0871c201d937a441c81ebc6c2db0",
-      "after_sha256": "21383e8c94873debc2314306dbc63eb9963e90adef72be588945699b3ec9708e"
-    },
-    {
-      "path": "crates/horizon-client/src/game/lan_particles.rs",
-      "before_sha256": "bc52d06c68a66720bfe09efe64153de127fc52c67a7c7b51d62774e45506535d",
-      "after_sha256": "221201ee8f6f927857a2cb39ea9b9987395fdfe7d97ea68d92201c9a4026c6eb"
+      "before_sha256": "9aaa4672db0e3b9416972c8a48e2b6ae94c31be492ec3a5bc07705ff6107e765",
+      "after_sha256": "2584ddaf45df304de65a1071b4dc5e9593ca9c2137d2fc0c3357f7855892095d"
     },
     {
       "path": "crates/horizon-client/src/game/remote.rs",
-      "before_sha256": "0afe5ba97458ea0b5f53966ae607cc0877702f11ee2c7e9ce22d65ad5c47433d",
-      "after_sha256": "612e5eede2100dc928dabc7fe98e162555e53523969844739acd3e0969bcde42"
-    },
-    {
-      "path": "crates/horizon-client/src/game/remote_chat.rs",
-      "before_sha256": "83be717b7d3f5fade58df5bd5e1e894515354770db2759eebde08e7f3dac6b8c",
-      "after_sha256": "8d360e16842b87ece14be17a0b7f8935743911f4a3403759a140710dd34cabbf"
+      "before_sha256": "7b0b1a2d2c57264dc6b74081af7e96da989feae07b4e85b3c3aa6bdbd421effc",
+      "after_sha256": "aea58358dadcff7a9663afca199b889377071a9efaa520de2280a5a2bb8482db"
     },
     {
       "path": "crates/horizon-client/src/game/remote_projectiles.rs",
-      "before_sha256": "ccc77b79ef5ee68cd6dcf22b33c0eeb48c66d012ab3306c85003a5ed0f39b24e",
-      "after_sha256": "ecf07b3393952b6f075fa7f319615a3397cac0f941203c1045f433d99ed43ae2"
+      "before_sha256": "53dd9b0ce1456fc282bb05b666e508c93080d72f4436d3ebfbe16a267556fc33",
+      "after_sha256": "522a92c9de5ad3c17c6d2df80b4a4ee077dec4807c4e7941bf8f86a75bec5660"
     },
     {
       "path": "crates/horizon-client/src/game/remote_stations.rs",
@@ -54,23 +39,23 @@
     },
     {
       "path": "crates/horizon-client/src/game/server_packs.rs",
-      "before_sha256": "256efc8ff9ca6a95ff512b0edce3e36b09574363c0f148217a3b96be4ceeeb24",
-      "after_sha256": "d58a50b0bd9cecb60b3185933543b66943893536508cf94b8e79bda576d44401"
+      "before_sha256": "0c7b97ef131d73da655889a999f4ac3794d0c984224ca4946966ec8c97336c67",
+      "after_sha256": "6d6b26ae3f1a9b0517b18515d18de3852f23ff001374b943b7537b1d18f51472"
     },
     {
       "path": "crates/horizon-client/src/game/stations.rs",
-      "before_sha256": "8cd1036e26afaf1e215ed5485688ef407d0b1cf48aa695f748afe95be4f18b14",
-      "after_sha256": "2b7b53093bb282e89b2f21ab802de09f78e7cf36c65010e4a9f331c1e1c70ccf"
+      "before_sha256": "51e9160c6e9d937f515d91f6c2859ae3de21e2df6eb052c1959e02dbce1692f0",
+      "after_sha256": "c6162c16085a7f021719bc47cf60c58a81f0e8c84a2b66cb2302d6058a1b33ee"
+    },
+    {
+      "path": "crates/horizon-client/src/game/world_entry.rs",
+      "before_sha256": "ed3f481a71a4b53209b6c481993a110a4ac9812a3fbf0935e43832f21fb95a91",
+      "after_sha256": "f823854b1568eaaf07e44c35480b3b3c15ab3d7b9d2c1d86459f72ff4fc41954"
     },
     {
       "path": "crates/horizon-client/src/item_sync.rs",
-      "before_sha256": "c01a1aeb05222732c5e9679d6bbf065be00c49de30cfccbd1df3334bb04e5ba5",
-      "after_sha256": "498910dbc7601db507e4112cf7eb03cf60a70e18124852e0800899567c5870ad"
-    },
-    {
-      "path": "crates/horizon-client/src/lan/io_pool.rs",
-      "before_sha256": "4279d4f497a1f2d718a4ffa46d3c7f74da9582a7b9c074dc6837745f71cc1f69",
-      "after_sha256": "f298d25745ab9264b5fd01d6775dde169d08d2119cf510b5a6259c9272ae140f"
+      "before_sha256": "881f333012a319054a0217da7c6c60c72810eaca160aad0ad616b187882e0ece",
+      "after_sha256": "c7927260c46e5fad1378b20151b8fd6a9867532657bf0b0c10ded608ce202826"
     },
     {
       "path": "crates/horizon-client/src/legacy47_flight.rs",
@@ -79,57 +64,62 @@
     },
     {
       "path": "crates/horizon-client/src/menu.rs",
-      "before_sha256": "083335b10e38232406e2a4e2a1b356462726a5e52cd6747ace3d282bf20ca0b5",
-      "after_sha256": "475d3407617b8c59789408c9357ff4efaa2a44c8f1180ee29119f77b0dd1e338"
+      "before_sha256": "b73e308e2735429105a7df58324a4b744e7350e8d90d00bc8c99fe36cc769618",
+      "after_sha256": "7753da31631fad6e6fb2941c5c3146c80fb07dadac3d92d6e7e49ce256ea413d"
     },
     {
       "path": "crates/horizon-client/src/multiplayer.rs",
-      "before_sha256": "003fca20222359d7bb1904d21cf4d42883ee6fbf8a7f2d4dc9f778d78326cdcc",
-      "after_sha256": "5e062b77a90e535c197d46a3532238aee9d83108917950e51943574e7fecfc09"
+      "before_sha256": "5d0fef2963db0e3d4982c98a75aa248e189a5b28c152a7d272fd00b7a6e8f7e3",
+      "after_sha256": "30cac7758e4ebef4636479062281cb06ec00be771418dbd663d147506efa763f"
     },
     {
       "path": "crates/horizon-client/src/multiplayer/version_select.rs",
       "before_sha256": null,
-      "after_sha256": "50f8966b26ca2395b6548f563271c5cb7e275dff82f184c7e7998f50373fdcbe"
+      "after_sha256": "13e3563981d4cd69b4d71e7ab73a071cb18d7d208e8a1692a9cbe3dc8496ae31"
     },
     {
       "path": "crates/horizon-client/src/net.rs",
-      "before_sha256": "da527af1c0fe6ea6b263fd3198916feb84ecb7c00d4f626ce8873f83753d333c",
-      "after_sha256": "23abd23a096490399e9c188f5ccfdde4a5959353dd34aebd4846eb9bf37a3835"
+      "before_sha256": "96ab7cbfb1ce3198f79a8d968a529f10fa6119f1a6c17ad956b7a33aa99f9ad3",
+      "after_sha256": "7e4cc014526a52510b1242859a153f731edb65424e42327aef7245213c15b582"
     },
     {
       "path": "crates/horizon-client/src/projectiles.rs",
-      "before_sha256": "6998d261c82277806d0eff51d76183706204d7c328d1eb4ef75db49206a2f000",
-      "after_sha256": "e13d2f5be771b334ba694ddb4f2e04ea2b9ec8a7cee6c222fa7351d488778fda"
+      "before_sha256": "25bebff793463d20243e5ab58aa73f1258b5b0ea2ca1ed49fcc8999f465326e0",
+      "after_sha256": "81d00af0625068bb9421cf89508bafa78ddb2648347ef162027e7e96094fb737"
     },
     {
       "path": "crates/horizon-client/src/server_packs.rs",
-      "before_sha256": "4c5a4c847b472f03ca0c201c4e2c9d1bf49a50ec8c8d6347484f7120571267a4",
-      "after_sha256": "90161974854ead365e6976b49d975cfa35c8f13c1a8ba75ece33800b10982795"
+      "before_sha256": "d50d957e37e1568d01a7a0312eae164fad0d968c57753a569a5fcb613936417b",
+      "after_sha256": "9313d20b7915db455ea21d320e9b964db7a2223959e047cd04b6fbbbfeaf3738"
     },
     {
       "path": "crates/horizon-client/src/title.rs",
-      "before_sha256": "0dea9c6167b0f2c11fb7f2ffebad426600375e3d2a51ff3bcbde03b780a37d7e",
-      "after_sha256": "c51bfc64938d5e7e8e0379e714b593053846bb5415533132d8a66032ac93770d"
+      "before_sha256": "3f27ec07f0f219813f8849a2250100fbbd1b68f40f6093a1da3943086b3b49f3",
+      "after_sha256": "9089b685e6b56a6abb55f4b6b5f9356b30b5fb3367425143459cb6de8a959b46"
     },
     {
       "path": "crates/horizon-protocol/examples/probe.rs",
-      "before_sha256": "12f197ebcbe07e3f0b640411f272b2df11775670564b43633d5ce062e50808b3",
+      "before_sha256": "efeb471b00af2013ac761ef23f7247525a45d40232cd4a82c45addb2e87bc229",
       "after_sha256": "db79ca382c621c5b6af9781435fcaeaa83e9e4f9c23455a811bf709cedcc92ec"
     },
     {
       "path": "crates/horizon-protocol/src/adapter.rs",
-      "before_sha256": "1cac1a3fb974df487c1b3ba3d1e3ad1fa78f648c12db9e9c0962369e749fc5e6",
-      "after_sha256": "abf1494acce1ba06cab110683f52cf8583d74663fda326de1c294c0aeaf9f8e3"
+      "before_sha256": "0504e6b164a6f0503fb93e81113c4ef5a5ba391eb93eb7844bd6f35c398c48cf",
+      "after_sha256": "5f21061267f1d91d81246b4e0a31e7452a8831831f217b2025ddcb5a82cd629c"
+    },
+    {
+      "path": "crates/horizon-protocol/src/adapter/client_session.rs",
+      "before_sha256": "86c0bfc201ea79e9e740a89d05d47d64e4403406d164ed11b38c460efda3215d",
+      "after_sha256": "bacc6dbae68c198e1934e077dd160a74394cff5756eca6fd126a7a93e4de1725"
     },
     {
       "path": "crates/horizon-protocol/src/adapter/ids.rs",
-      "before_sha256": "e4e5d53664d36972934912aff61dd39034c30ffe4cd07be1b6a1bfa5617ac9b9",
-      "after_sha256": "fb0f49c7f712c1f58b68fabe6c320bde53f3c8d88ec19ff962cf7ac4277dea66"
+      "before_sha256": "006c4d70410c6bef9e2b5349e8b0dc0f5d28589f77233de4ada69008006af59d",
+      "after_sha256": "3bd9aa5d3cf78bf305859953bb6865abb4edad4f256f94fb5cd4c8a38533e467"
     },
     {
       "path": "crates/horizon-protocol/src/adapter/legacy.rs",
-      "before_sha256": null,
+      "before_sha256": "1fe3b18edd094ce81c36881c3db6df8c5b6fb37aa2406f65a85986c912454562",
       "after_sha256": "1bd893a7c8d5e8344cf51a896f1cf3b33d0058ea44e43edc6094a0248637b43f"
     },
     {
@@ -139,8 +129,8 @@
     },
     {
       "path": "crates/horizon-protocol/src/adapter/session.rs",
-      "before_sha256": "65ae521351b33c886c562c9ff1513cd3ee35436975213b59507b7edc261c9f0f",
-      "after_sha256": "dbe3d6057d5448b3fa6ad39453eb4240f6f51c1020e0c5197e59d6a92e4fe036"
+      "before_sha256": "5f7c5df7bc2cf9c85c5337d2197ce326c8c779f86211ebfae35e2bfbc1cb2509",
+      "after_sha256": "812704f146ec8ca36977aaa74dc2b8dadbc59f18ec838b495d91649d14a37e75"
     },
     {
       "path": "crates/horizon-protocol/src/adapter/session/pre_configuration.rs",
@@ -149,73 +139,38 @@
     },
     {
       "path": "crates/horizon-protocol/src/adapter/translate.rs",
-      "before_sha256": "174f6655280c7ec774ab0d76873128c9d087387135cb815bdae7a77d16be641a",
-      "after_sha256": "d81eecb2be1a53119ffc00e01fd84ddb0892caa0edd66ee10c3328d8dea4469c"
+      "before_sha256": "7f21c6e56265a9b551187d2f6e61a3e2e0f5ce244e3e5c116800ada7625ac53f",
+      "after_sha256": "cb65f0df76392b6a1a23259ff775f1ece23bf38bbcc55e34d3d2af9cb6d56421"
     },
     {
       "path": "crates/horizon-protocol/src/adapter/translate/v1_20_1.rs",
       "before_sha256": null,
-      "after_sha256": "c911183869c18ef2b5e922ca9162fbe3fe62138ebcca9a55e6f76757b16267a5"
-    },
-    {
-      "path": "crates/horizon-protocol/src/adapter/translate/v1_20_2.rs",
-      "before_sha256": null,
-      "after_sha256": "9df69ab3a0426db3f366b6dbdf5785248b48b1b440aba89f81ece60e697252f3"
+      "after_sha256": "3740b483b072520f736bb48adfb0c1fb49cee70f55cb6499994021c13321da01"
     },
     {
       "path": "crates/horizon-protocol/src/adapter/translate/v1_20_2/text.rs",
-      "before_sha256": null,
+      "before_sha256": "da53b3f19b922b5ddb9289ba6c1fe15ff3e97c2a3858590a3540f4ce5bd89c04",
       "after_sha256": "aa2a8142c0b198fe169857208502c1ef92f4ab1c2fd5798b5d8dcebb059aeeff"
     },
     {
       "path": "crates/horizon-protocol/src/adapter/translate/v1_20_3.rs",
-      "before_sha256": null,
-      "after_sha256": "6475cdc6241cde8853fa07befb590869de04c78635904af1a64caa114a8e888f"
-    },
-    {
-      "path": "crates/horizon-protocol/src/adapter/translate/v1_20_5.rs",
-      "before_sha256": null,
-      "after_sha256": "7b1281202dc9f37efbef1892b924ebf71e5dca86f87477cc7dde97c1ac623e07"
+      "before_sha256": "e6c56bfc7c70b2dea62783d9a4701113e324ed7a96b63270a33af0557229f1f3",
+      "after_sha256": "aa233d63355051d75f6f4714402211ff6cf384860d1d220e6c39b16c84fd146d"
     },
     {
       "path": "crates/horizon-protocol/src/adapter/translate/v1_21_1.rs",
-      "before_sha256": null,
-      "after_sha256": "3fdc5e3458ac0209b925c8d0a1d0d8d80ca592eb455e3da09233e4ee28d63597"
-    },
-    {
-      "path": "crates/horizon-protocol/src/adapter/translate/v1_21_1/boats.rs",
-      "before_sha256": null,
-      "after_sha256": "57ea1a8e9c41f4335af454c76f04342d791d6e1c16ace96c384e2c75e14aa5f5"
+      "before_sha256": "3a2d879d3ce943cd3d76bd11878239f6732af99eccb492f6f99cf77627c9817c",
+      "after_sha256": "68d5c750eba8d2820e724dc66f6a809cee2821b8ba638ebf120c02d97cb0d03a"
     },
     {
       "path": "crates/horizon-protocol/src/adapter/translate/v1_21_1/recipes.rs",
-      "before_sha256": null,
-      "after_sha256": "4a8479157a2f9b6d529030944dd60845085137b220f3a1748d6325f03899035c"
-    },
-    {
-      "path": "crates/horizon-protocol/src/adapter/translate/v1_21_3.rs",
-      "before_sha256": null,
-      "after_sha256": "a89aedde9251c169c4e9775ccecac32a2d909647067e370cfa7b4546d8d64277"
-    },
-    {
-      "path": "crates/horizon-protocol/src/adapter/translate/v1_21_4.rs",
-      "before_sha256": null,
-      "after_sha256": "adacb72216e577b8aa8d301e43ad6ec25d5d55909508a765a8d64c7885c016da"
-    },
-    {
-      "path": "crates/horizon-protocol/src/adapter/translate/v1_21_5.rs",
-      "before_sha256": null,
-      "after_sha256": "a1a7c5bb3ee25c5f2f7d2a21517fb18bb1c213c4186f70a1b362936d61174fb6"
-    },
-    {
-      "path": "crates/horizon-protocol/src/adapter/translate/v1_21_8.rs",
-      "before_sha256": null,
-      "after_sha256": "219f2f2da0d28e2b8851fb7894d706599bf6b77cfb7396c96a86bb3f855c5a3d"
+      "before_sha256": "765f033ce36fe0328c991db7b73a573ef71bc6efc0db0e933cf9fe9dd8c43214",
+      "after_sha256": "5cc8b8d51e82f1b34cac586834fa7b39e6dd076589966dac9b38511d980610e4"
     },
     {
       "path": "crates/horizon-protocol/src/adapter/v1_12_2/bridge.rs",
       "before_sha256": null,
-      "after_sha256": "8206b9a3f0a5c68e0d1227731b112337dbed0854152bc24ad2edc75ee112fb43"
+      "after_sha256": "dddcc92753c6a6ae708accd1cac447890bf62ab959ffde3382ff4cb1958020bb"
     },
     {
       "path": "crates/horizon-protocol/src/adapter/v1_12_2/context_connections.rs",
@@ -275,7 +230,7 @@
     {
       "path": "crates/horizon-protocol/src/adapter/v1_12_2/inventory/mount.rs",
       "before_sha256": null,
-      "after_sha256": "b51744ffd8b8e05042e88dbc24330fbd421b51cdf8694b738721d3b0314def10"
+      "after_sha256": "44688064733af594ac1fba5fdb665fa92cf2e922ca947ccb2a80c0e6489e5ea1"
     },
     {
       "path": "crates/horizon-protocol/src/adapter/v1_12_2/mod.rs",
@@ -315,7 +270,7 @@
     {
       "path": "crates/horizon-protocol/src/adapter/v1_16_5/bootstrap.rs",
       "before_sha256": null,
-      "after_sha256": "0906fb097e63ff9c23da5ed0f1ceb47623a7212dcaf7b93d55a2973931143fbb"
+      "after_sha256": "9601f1b9abc5174a77e6ca93dbb9675bfa1522a66d58bc4ea5c021b2d3469f2d"
     },
     {
       "path": "crates/horizon-protocol/src/adapter/v1_16_5/chunk_goldens.rs",
@@ -330,7 +285,7 @@
     {
       "path": "crates/horizon-protocol/src/adapter/v1_16_5/entity.rs",
       "before_sha256": null,
-      "after_sha256": "9ebd138858b8464c4d3020486936a4c7b00b882466a63badf34bd2dd44c3786f"
+      "after_sha256": "fead9de718c17cb98991e6707b6c606e2fb1b703896360fad85f0e1080e42629"
     },
     {
       "path": "crates/horizon-protocol/src/adapter/v1_16_5/fixtures.rs",
@@ -370,7 +325,7 @@
     {
       "path": "crates/horizon-protocol/src/adapter/v1_16_5/worldfx.rs",
       "before_sha256": null,
-      "after_sha256": "7940b9ab8040f87ae816a60380fcc3ea6b2c5853444c56039151ff36b4ff7344"
+      "after_sha256": "7b2be0565e97f843e634ea232314234f31a181345737060f61a2362f97328788"
     },
     {
       "path": "crates/horizon-protocol/src/adapter/v1_16_5/worldfx_goldens.rs",
@@ -388,99 +343,9 @@
       "after_sha256": "6feff4015134cb33436350c5dbc9af3636a777c38351a4af19cc3235685d3bff"
     },
     {
-      "path": "crates/horizon-protocol/src/adapter/v1_20_2.rs",
-      "before_sha256": null,
-      "after_sha256": "4edae02e0455216eedf1447f18f7f5619cfb2286e1848e0b7fc752cdc1918cff"
-    },
-    {
-      "path": "crates/horizon-protocol/src/adapter/v1_20_2_ids.rs",
-      "before_sha256": null,
-      "after_sha256": "24702334747c611d4f0bcb1c221bd1c0be70a9eb6dd6368e9f4b60c1fae137e5"
-    },
-    {
-      "path": "crates/horizon-protocol/src/adapter/v1_20_3.rs",
-      "before_sha256": null,
-      "after_sha256": "9d448ef29037c74f183e867beb9fb1c8ec576623a4babb8715b423acbee959a3"
-    },
-    {
-      "path": "crates/horizon-protocol/src/adapter/v1_20_3_ids.rs",
-      "before_sha256": null,
-      "after_sha256": "78170383d32d01432624034065022ab133cbf38a7cf12b8c035e7a821a5a3632"
-    },
-    {
-      "path": "crates/horizon-protocol/src/adapter/v1_20_5.rs",
-      "before_sha256": null,
-      "after_sha256": "791e9e4f6743750d76d9fe1ada271dca2f624899d3f032ca37ed82d849f5fa43"
-    },
-    {
-      "path": "crates/horizon-protocol/src/adapter/v1_20_5_ids.rs",
-      "before_sha256": null,
-      "after_sha256": "e172856ba7d0fe5c8048a8f1afcc0ed6aea494b35b26dd8ee3265a269df0cefa"
-    },
-    {
-      "path": "crates/horizon-protocol/src/adapter/v1_21_1.rs",
-      "before_sha256": null,
-      "after_sha256": "efbaa7e67b9cd1686a226ef02c95dd5a8a0e429dc52d4840de136ef41e52bccb"
-    },
-    {
-      "path": "crates/horizon-protocol/src/adapter/v1_21_1_ids.rs",
-      "before_sha256": null,
-      "after_sha256": "8b0b7b9a19cd537fcfb5003baa5b01824056d2984abac10577405ab9b83d3c70"
-    },
-    {
-      "path": "crates/horizon-protocol/src/adapter/v1_21_3.rs",
-      "before_sha256": null,
-      "after_sha256": "54b0e9414d03db4e22c945dce9fae3ccd42894ee7ac0e3763769f2fcea085a81"
-    },
-    {
-      "path": "crates/horizon-protocol/src/adapter/v1_21_3_ids.rs",
-      "before_sha256": null,
-      "after_sha256": "ad0e31261b04bc777ca9f646698aeff94d5d750ea976cfa9d6d6fbdfb0bf3af5"
-    },
-    {
-      "path": "crates/horizon-protocol/src/adapter/v1_21_4.rs",
-      "before_sha256": null,
-      "after_sha256": "bca1bc7d95d99a247e39d6ac1d9edddad0a50f8a643fa0a3b356f2f46a978302"
-    },
-    {
-      "path": "crates/horizon-protocol/src/adapter/v1_21_4_ids.rs",
-      "before_sha256": null,
-      "after_sha256": "52ebb3711a0f3be6a38808cee2dcd38f5521eb4bbe8b378ae59f25ed7bf40125"
-    },
-    {
-      "path": "crates/horizon-protocol/src/adapter/v1_21_5.rs",
-      "before_sha256": null,
-      "after_sha256": "1cff8aff1c0f919eb335ed6663900f5702f20676dccbdca9179ad85ae9ede8cc"
-    },
-    {
-      "path": "crates/horizon-protocol/src/adapter/v1_21_5_ids.rs",
-      "before_sha256": null,
-      "after_sha256": "42ccd53991cfe652d83a1b402a6dbcab51fdcbf708efba131f9b1b7f21b7df71"
-    },
-    {
-      "path": "crates/horizon-protocol/src/adapter/v1_21_6.rs",
-      "before_sha256": null,
-      "after_sha256": "5fb4b9ef172084fea7a57e7d847fe1bc1148058aada8049bfb15f8e8698d58b9"
-    },
-    {
-      "path": "crates/horizon-protocol/src/adapter/v1_21_6_ids.rs",
-      "before_sha256": null,
-      "after_sha256": "80267b62f62a8d9749fe71fc5125d88dff7b39a36ac0c01335e9c44296d080f7"
-    },
-    {
-      "path": "crates/horizon-protocol/src/adapter/v1_21_8.rs",
-      "before_sha256": null,
-      "after_sha256": "011b18c317a224ccacdb042e42ee115db0b15651a7f385dd6715e214151d552e"
-    },
-    {
-      "path": "crates/horizon-protocol/src/adapter/v1_21_8_ids.rs",
-      "before_sha256": null,
-      "after_sha256": "76c80775029029456b6a0079ec4c6dc97864ef23ff07a4df84b01eeb231ba3b4"
-    },
-    {
       "path": "crates/horizon-protocol/src/adapter/v1_8_9/bootstrap.rs",
       "before_sha256": null,
-      "after_sha256": "20ffc47987d2307941efd9dd0a863165c81e4e98a6b53dd501ee4be11c3c7187"
+      "after_sha256": "6f464bcd5945e5c37702d0b47f16978fbc73555345623da309259e11f53541e8"
     },
     {
       "path": "crates/horizon-protocol/src/adapter/v1_8_9/bridge.rs",
@@ -630,7 +495,7 @@
     {
       "path": "crates/horizon-protocol/src/adapter/v1_8_9/terrain.rs",
       "before_sha256": null,
-      "after_sha256": "9a95ae3e92e6cd10ad2944e1bea4ae762749c6f6ac2915522337d79b92cee79c"
+      "after_sha256": "830cc4c05d41d49c9116ba29ff8ba529a6ea3d376fb2a012814ba9a649dd12a4"
     },
     {
       "path": "crates/horizon-protocol/src/adapter/v1_8_9/world.rs",
@@ -719,18 +584,13 @@
     },
     {
       "path": "crates/horizon-protocol/src/buf.rs",
-      "before_sha256": "91a071408344c5f770bab428ae39436f445d45ddba93d7882484b018c88912b4",
-      "after_sha256": "ca786a032a855be5b72a45c0869c8c1372285d58f647a3e54df529f05ede74c8"
-    },
-    {
-      "path": "crates/horizon-protocol/src/chunk.rs",
-      "before_sha256": "0678352cbaf91e349f6daed821a20e15cdae42479101e56e899f1b30fcaae590",
-      "after_sha256": "19563634a1f39e32f6061c2e15015200ed6d247641c7128b91532cfb22e16fdc"
+      "before_sha256": "59d6273da286dc7f391d1531c9d06c7443d972be0b29a9c1c6e3ead36c46a3a7",
+      "after_sha256": "ecab4df2235042a4e6f24c83b2c10cd8358a50408787b104486e4174c7ec5384"
     },
     {
       "path": "crates/horizon-protocol/src/connection.rs",
-      "before_sha256": "58a88134b1678463d891c15cdecb2b39586507feca74e2be101b152004b47eee",
-      "after_sha256": "884be642e1c5a66416a9e975ebaf614526ffed0fe58b4f8f26c0a8a8c8700c4f"
+      "before_sha256": "a6f1fa2841cdd3970c48c023f144d9eb771dfff67787378b7978a083c370d20e",
+      "after_sha256": "3fc6adb4cfabc5c533e30fd7c246be95daf3f3bdfd63ebb340e0bccf79a19005"
     },
     {
       "path": "crates/horizon-protocol/src/connection/poll47_tests.rs",
@@ -739,13 +599,13 @@
     },
     {
       "path": "crates/horizon-protocol/src/entity_data.rs",
-      "before_sha256": "648c8f13b78c2c17bd6bf38feb434c2674ea3d44b5c0baed8f6c2a2d5884bb3b",
-      "after_sha256": "b948ee3a61c0082069d83ca271cad635000687a1fc8314e602186f9d66d721c3"
+      "before_sha256": "6dce0bd4f09c3ec3fd1af3a212b591b433f6fd90438c10fbdf81396dbd169179",
+      "after_sha256": "077cb2c89714c03401e89268162740d69a0a8425def09403b220bbaee0d24760"
     },
     {
       "path": "crates/horizon-protocol/src/item.rs",
-      "before_sha256": "6bfbe6d33d50e088702003ef8e3c4218afb55f07ac01c991221fe0242632bbe6",
-      "after_sha256": "13c40b5f42be9ce9396cc87a4e06ef3534b95df1d039974baa2ae9aafecaeb1c"
+      "before_sha256": "78b98207c0ee3fd8c735effd8a0710842f2af3cf85d5fa65ddd4765201b7dceb",
+      "after_sha256": "9756ff12e00a6689596113ee72e390f14dfdfd547b30f8252bb796f94559f958"
     },
     {
       "path": "crates/horizon-protocol/src/item/item47.rs",
@@ -753,49 +613,14 @@
       "after_sha256": "62d8ab0a3607e9b4c327b4cf606193686d47a6b0074827e589ac3f16d3782325"
     },
     {
-      "path": "crates/horizon-protocol/src/item/skip.rs",
-      "before_sha256": "7c5a7198194d3153250094fc8a8883aed049ac81b96803388665b6853274b807",
-      "after_sha256": "12e6446db6f025fe5c4208cdcb0d47335472bb7faf7f8aa79b52f0bdff62dd12"
-    },
-    {
       "path": "crates/horizon-protocol/src/item/v1_20_3.rs",
-      "before_sha256": null,
-      "after_sha256": "03a5ab59647449ca156310fd714bf89739df19dfaa45bd268811383d5216e6de"
+      "before_sha256": "4232d0f5c3f645ec089f1b33fa02eeb41e558787b64b7cee808ec3b58539639f",
+      "after_sha256": "8386d12b3878689f47407f21e3c3d46efb68762b09e361788b54e98c82523114"
     },
     {
       "path": "crates/horizon-protocol/src/item/v1_20_3/numeric47_creative.rs",
       "before_sha256": null,
       "after_sha256": "3de852a5dc2ab6d3067b9b4eee3ebf13333fae5e0434315d1dbccd94828695fa"
-    },
-    {
-      "path": "crates/horizon-protocol/src/item/v1_20_5.rs",
-      "before_sha256": null,
-      "after_sha256": "6d6717b74ddda6745158613a80370b83db7d6043cfff37bf042a87d87a6ebe26"
-    },
-    {
-      "path": "crates/horizon-protocol/src/item/v1_21_1.rs",
-      "before_sha256": null,
-      "after_sha256": "47f655d505de24b50cb288a2aa097d24808386dc0f57bdcc4467d6acb73871e0"
-    },
-    {
-      "path": "crates/horizon-protocol/src/item/v1_21_4.rs",
-      "before_sha256": null,
-      "after_sha256": "3a4c913cd8fc49f9863d446ccbbecf57b836fc4ecda723fe6d2f662553467b0a"
-    },
-    {
-      "path": "crates/horizon-protocol/src/item/v1_21_5.rs",
-      "before_sha256": null,
-      "after_sha256": "b7ea13aba9fbd6bb76b782160ef63130834742fee5a6167cda8864b869bf4c44"
-    },
-    {
-      "path": "crates/horizon-protocol/src/packets/play.rs",
-      "before_sha256": "fb747673666361cc70e076913a2c9ac5e3157ab2ecff8e8d79b578640824c7b2",
-      "after_sha256": "1895f7b7d2496d492af4a43f5d3fd7093ca91b12e26beb50c2bdb64cd8370895"
-    },
-    {
-      "path": "crates/horizon-protocol/src/packets/recipes.rs",
-      "before_sha256": "29a4c592417aec66b17d0554ceab05a3895f10db15a95d1c0be82a6c834dbb81",
-      "after_sha256": "f86a0896d69e3a60999c9a00897fc9fcd0ea4334f0a9011ca2d20aaecb1c8d69"
     },
     {
       "path": "crates/horizon-protocol/tests/checked47.rs",
@@ -811,11 +636,6 @@
       "path": "crates/horizon-protocol/tests/session47_public.rs",
       "before_sha256": null,
       "after_sha256": "49cc084a052ddf0acf24062205f233157b7550ed043fe4f28e7f9e8dd77cb3dc"
-    },
-    {
-      "path": "crates/horizon-world/src/datafix/json.rs",
-      "before_sha256": "1209e8d63b5d6a7806b0aaf058512e4db0edc4d8923c289cc0e576e3e514db34",
-      "after_sha256": "ff93679ebf427cb291a80f88eedc74c0cf4a77ff504916a83c2466bf23021899"
     }
   ]
 }

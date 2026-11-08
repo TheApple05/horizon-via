@@ -135,7 +135,9 @@ fn decode_body(x: i32, z: i32, full: bool, mask: u16, sky: bool, body: &[u8]) ->
         }
         let states = r
             .bytes(BLOCKS * 2)?
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|v| u16::from_le_bytes([v[0], v[1]]))
             .collect();
         *section = Some(Section {

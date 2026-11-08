@@ -36,7 +36,7 @@ fn version_name(version: Option<ServerVersion>) -> String {
         Some(ServerVersion::V1_21_8) => "1.21.7–1.21.8".into(),
         Some(ServerVersion::V1_21_3) => "1.21.2–1.21.3".into(),
         Some(ServerVersion::V1_21_1) => "1.21–1.21.1".into(),
-        Some(ServerVersion::V1_20_5) => "1.20.5–1.20.6".into(),
+        Some(ServerVersion::V1_20_6) => "1.20.5–1.20.6".into(),
         Some(ServerVersion::V1_20_3) => "1.20.3–1.20.4".into(),
         Some(ServerVersion::V1_20_1) => "1.20–1.20.1".into(),
         Some(version) => version.name().into(),
@@ -58,7 +58,7 @@ fn details(version: Option<ServerVersion>) -> (&'static str, &'static str, &'sta
         Some(ServerVersion::V1_21_4) => ("garden_awakens", "Dec 3, 2024", "resin_clump"),
         Some(ServerVersion::V1_21_3) => ("bundles_of_bravery", "Oct 22, 2024", "bundle"),
         Some(ServerVersion::V1_21_1) => ("tricky_trials", "Jun 13, 2024", "trial_key"),
-        Some(ServerVersion::V1_20_5) => ("armored_paws", "Apr 23, 2024", "armadillo_scute"),
+        Some(ServerVersion::V1_20_6) => ("armored_paws", "Apr 23, 2024", "armadillo_scute"),
         Some(ServerVersion::V1_20_3) => ("trails_tales", "Dec 5, 2023", "decorated_pot"),
         Some(ServerVersion::V1_20_2) => ("trails_tales", "Sep 21, 2023", "brush"),
         Some(ServerVersion::V1_20_1) => ("trails_tales", "Jun 7, 2023", "cherry_sapling"),
@@ -436,8 +436,8 @@ mod tests {
         assert_eq!(entries("26.1.1"), vec![Some(ServerVersion::V26_1)]);
         assert_eq!(entries("1.21.2"), vec![Some(ServerVersion::V1_21_3)]);
         assert!(entries("1.21.1").contains(&Some(ServerVersion::V1_21_1)));
-        assert_eq!(entries("1.20.5"), vec![Some(ServerVersion::V1_20_5)]);
-        assert_eq!(entries("1.20.6"), vec![Some(ServerVersion::V1_20_5)]);
+        assert_eq!(entries("1.20.5"), vec![Some(ServerVersion::V1_20_6)]);
+        assert_eq!(entries("1.20.6"), vec![Some(ServerVersion::V1_20_6)]);
         assert_eq!(entries("1.20.3"), vec![Some(ServerVersion::V1_20_3)]);
         assert_eq!(entries("1.20.4"), vec![Some(ServerVersion::V1_20_3)]);
         assert_eq!(entries("1.20.2"), vec![Some(ServerVersion::V1_20_2)]);
@@ -445,7 +445,7 @@ mod tests {
         assert_eq!(
             entries("1.20"),
             vec![
-                Some(ServerVersion::V1_20_5),
+                Some(ServerVersion::V1_20_6),
                 Some(ServerVersion::V1_20_3),
                 Some(ServerVersion::V1_20_2),
                 Some(ServerVersion::V1_20_1),

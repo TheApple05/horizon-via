@@ -381,19 +381,19 @@ impl Entities {
                         } else {
                             value
                         };
-                        if tables::ENTITY_NAMES[entity.source] == "minecraft:potion" && index == 7 {
-                            if let Value::Item(Some(stack)) = &value {
-                                let lingering = tables::ITEM_NAMES
-                                    .iter()
-                                    .position(|v| *v == "minecraft:lingering_potion")
-                                    .map(|i| tables::ITEM_UP[i]);
-                                next.spawn.kind =
-                                    current_entity(if Some(stack.item) == lingering {
-                                        "minecraft:lingering_potion"
-                                    } else {
-                                        "minecraft:splash_potion"
-                                    })?;
-                            }
+                        if tables::ENTITY_NAMES[entity.source] == "minecraft:potion"
+                            && index == 7
+                            && let Value::Item(Some(stack)) = &value
+                        {
+                            let lingering = tables::ITEM_NAMES
+                                .iter()
+                                .position(|v| *v == "minecraft:lingering_potion")
+                                .map(|i| tables::ITEM_UP[i]);
+                            next.spawn.kind = current_entity(if Some(stack.item) == lingering {
+                                "minecraft:lingering_potion"
+                            } else {
+                                "minecraft:splash_potion"
+                            })?;
                         }
                         if tables::ENTITY_NAMES[entity.source] == "minecraft:area_effect_cloud"
                             && index == 10
