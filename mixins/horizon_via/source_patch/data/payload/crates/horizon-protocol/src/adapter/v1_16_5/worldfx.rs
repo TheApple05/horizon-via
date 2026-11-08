@@ -1088,10 +1088,10 @@ impl State {
                         let _ = ingredient;
                     }
                     recipes::RecipeDisplay::Stonecutter { result, .. } => {
-                        if let Some(requirements) = &entry.requirements {
-                            if let Some(set) = requirements.first() {
-                                stonecutting.push((set, result));
-                            }
+                        if let Some(requirements) = &entry.requirements
+                            && let Some(set) = requirements.first()
+                        {
+                            stonecutting.push((set, result));
                         }
                     }
                     _ => {}

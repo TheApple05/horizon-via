@@ -176,7 +176,36 @@ pub fn registries() -> Vec<cfg::RegistryData> {
                 .collect(),
         });
     }
+    for registry in &mut out {
+        upgrade_biomes(registry);
+    }
     out
+}
+
+pub(crate) fn upgrade_biomes(registry: &mut cfg::RegistryData) {
+    if registry.registry != "minecraft:worldgen/biome" {
+        return;
+    }
+    for entry in &mut registry.entries {
+        let Some(Tag::Compound(data)) = &mut entry.data else {
+            continue;
+        };
+        let attributes = [
+            ("fog_color", "minecraft:visual/fog_color"),
+            ("sky_color", "minecraft:visual/sky_color"),
+            ("water_fog_color", "minecraft:visual/water_fog_color"),
+        ]
+        .into_iter()
+        .filter_map(|(old, new)| {
+            data.get(&"effects".into())?
+                .get(old)
+                .cloned()
+                .map(|value| (new.into(), value))
+        })
+        .collect();
+        data.entry("attributes".into())
+            .or_insert(Tag::Compound(attributes));
+    }
 }
 
 fn sky_color(temperature: f32) -> i32 {
@@ -276,4 +305,42 @@ pub fn commands() -> play::Clientbound {
     w.string("minecraft:ask_server");
     w.varint(0);
     play::Clientbound::Unknown(crate::ids::play::clientbound::COMMANDS, w.data)
+}
+
+#[cfg(test)]
+mod biome_tests {
+    use super::*;
+
+    #[test]
+    fn legacy_biomes_supply_current_visual_attributes_without_replacing_custom_ones() {
+        let mut biome = registries()
+            .into_iter()
+            .find(|registry| registry.registry == "minecraft:worldgen/biome")
+            .unwrap();
+        for entry in &biome.entries {
+            let attributes = entry.data.as_ref().unwrap().get("attributes").unwrap();
+            assert_eq!(
+                attributes.get("minecraft:visual/fog_color"),
+                Some(&Tag::Int(12638463))
+            );
+            assert_eq!(
+                attributes.get("minecraft:visual/water_fog_color"),
+                Some(&Tag::Int(0x050533))
+            );
+            assert!(matches!(
+                attributes.get("minecraft:visual/sky_color"),
+                Some(Tag::Int(_))
+            ));
+        }
+        let Tag::Compound(data) = biome.entries[0].data.as_mut().unwrap() else {
+            panic!("biome")
+        };
+        let custom = Tag::compound([("minecraft:visual/fog_color", Tag::Int(0x123456))]);
+        data.insert("attributes".into(), custom.clone());
+        upgrade_biomes(&mut biome);
+        assert_eq!(
+            biome.entries[0].data.as_ref().unwrap().get("attributes"),
+            Some(&custom)
+        );
+    }
 }

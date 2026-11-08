@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.0 — experimental
+
+- Update the official Horizon source pin to `802a858cc1ff8a26a5d17424c51ad0f478c79099` and the launcher-matched horizon-mixins pin to `5a64af938ec86b00d53d16a408aabc0038fb3e57`.
+- Integrate upstream older-server/client adapters, component codecs and connection-scoped particle markers. Retain native legacy support, the version picker and two-input smithing; remove payload files now identical to upstream.
+- Upgrade legacy biome visual attributes for the current renderer.
+- Route Java 1.16.5 minecart clicks to the ordinary interaction and preserve armor-stand hit positions.
+- Preserve motion on relative axes when a 1.16.5 server corrects the player's position.
+- Stop a connection when a packet translation fails instead of decoding rejected legacy bytes as a native packet.
+- Replace the single legacy server resource pack on 1.8.9 and 1.12.2, including successive requests and late download replies.
+
+Packaged-source validation on Windows/MSVC passed 635 protocol/public-connection tests, 8 installer guard tests, 6 Python packaging tests and strict protocol/installer Clippy. The native client and control tool built from the staged archive; a subsequent picker test fixture correction leaves production code unchanged. With the protocol crate optimized at level 2 and the rest of the client in development mode, fresh offline vanilla 1.8.9, 1.12.2, 1.16.5, 1.20.1 and 26.3 checks passed terrain, inventory, movement, block interaction and reconnect gates without normal decoding or biome-attribute diagnostics. The 1.12.2 check retained server-owned chunks through wide-view teleports; 1.16.5, 1.20.1 and 26.3 also passed Nether travel and return. The 1.16.5 smithing run passed server-confirmed ordinary/shift upgrades, base NBT preservation, ingredient consumption, input routing and close/reopen recovery; the two-input screen was visually inspected.
+
+An unoptimized development build timed out during a large 1.12.2 chunk burst; use the launcher's Performance profile for playing. Full Performance-profile builds, the normal launcher download/install flow, online authentication across the target matrix, modified servers, full playthroughs and other platforms remain unverified. This remains experimental and does not establish complete ViaFabricPlus parity.
+
 ## 0.4.1 — experimental
 
 - Support Java 1.16.5 smithing with two visible inputs and no upgrade template.

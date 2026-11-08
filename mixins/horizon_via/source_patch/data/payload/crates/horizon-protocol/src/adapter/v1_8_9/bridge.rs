@@ -39,7 +39,7 @@ pub struct Bridge {
     predictions: Vec<(i32, Vec<u8>)>,
     pending_outgoing: Vec<Vec<u8>>,
     projectile_acceleration: HashMap<i32, [f64; 3]>,
-    resource_id: Option<u128>,
+    resource_pack: super::LegacyPackSlot,
     worldfx: worldfx::State,
     listener: Option<[f64; 3]>,
     camera: Option<i32>,
@@ -552,18 +552,13 @@ impl Bridge {
                 let url = r.string(32767)?;
                 let hash = r.string(40)?;
                 super::finish(&r)?;
-                let id = crate::crypto::offline_uuid(&format!("HorizonViaLegacyPack:{url}:{hash}"));
-                self.primitives.resource_pack(payload)?;
-                self.resource_id = Some(id);
-                return Ok(vec![play::Clientbound::ResourcePackPush(
-                    cfg::ResourcePackPush {
-                        id,
-                        url,
-                        hash,
-                        required: false,
-                        prompt: None,
-                    },
-                )]);
+                return Ok(match self.resource_pack.request(url, hash, true) {
+                    Ok(request) => vec![play::Clientbound::ResourcePackPush(request)],
+                    Err(status) => {
+                        self.pending_outgoing.push(wire(0x19, &status));
+                        vec![]
+                    }
+                });
             }
             _ => return Err(Error::new(format!("unhandled protocol47 play packet {id}"))),
         };
@@ -668,21 +663,10 @@ impl Bridge {
                     let mut r = Reader::new(payload);
                     let response = cfg::ResourcePackResponse::read(&mut r)?;
                     super::finish(&r)?;
-                    if self.resource_id != Some(response.id) {
-                        return Err(Error::new("legacy resource response has wrong request ID"));
-                    }
-                    let status = match response.action {
-                        0..=3 => Some(response.action),
-                        4 => None,
-                        5 | 6 => Some(2),
-                        7 => Some(1),
-                        _ => return Err(Error::new("unknown resource pack response")),
-                    };
-                    if let Some(status) = status {
-                        let mut w = Writer::new();
-                        w.varint(status);
-                        out.packet = Some(wire(0x19, &self.primitives.resource_status(&w.data)?));
-                    }
+                    out.packet = self
+                        .resource_pack
+                        .status(response.id, response.action, true)?
+                        .map(|body| wire(0x19, &body));
                 }
                 _ => {
                     let p = play::Serverbound::decode(id, payload)?;

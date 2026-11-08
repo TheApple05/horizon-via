@@ -65,7 +65,7 @@ pub(super) fn kind(slots: u8, entity: i32, cx: &impl Context) -> Result<Kind> {
     }
     if slots != 2
         && !(slots == 17 && matches!(kind, 37 | 88))
-        && !(kind == 79 && (5..=17).contains(&slots) && (slots - 2) % 3 == 0)
+        && !(kind == 79 && (5..=17).contains(&slots) && (slots - 2).is_multiple_of(3))
     {
         return Err(Error::new(
             "old horse layout must have2 slots or17 for a chested donkey/mule",

@@ -38,7 +38,7 @@ pub struct Bridge {
     skulls: HashMap<[i32; 3], (u8, u8)>,
     pots: HashMap<[i32; 3], i32>,
     beds: HashMap<[i32; 3], u8>,
-    resource: Option<u128>,
+    resource_pack: old::LegacyPackSlot,
     recipes: super::recipes::State,
 }
 
@@ -153,6 +153,7 @@ impl Bridge {
                             ])),
                         });
                     }
+                    bootstrap::upgrade_biomes(&mut registry);
                     out.packets.push(bootstrap::packet(
                         cfg::Clientbound::RegistryData(registry).encode(),
                     ));
@@ -590,15 +591,14 @@ impl Bridge {
             0x34 => {
                 let url = r.string(32767)?;
                 let hash = r.string(40)?;
-                let id = crate::crypto::offline_uuid(&format!("HorizonVia340Pack:{url}:{hash}"));
-                self.resource = Some(id);
-                vec![play::Clientbound::ResourcePackPush(cfg::ResourcePackPush {
-                    id,
-                    url,
-                    hash,
-                    required: false,
-                    prompt: None,
-                })]
+                finish(&r)?;
+                match self.resource_pack.request(url, hash, false) {
+                    Ok(request) => vec![play::Clientbound::ResourcePackPush(request)],
+                    Err(status) => {
+                        self.pending_outgoing.push(wire(0x18, &status));
+                        vec![]
+                    }
+                }
             }
             0x33 => {
                 let id = r.varint()?;
@@ -733,21 +733,10 @@ impl Bridge {
                     let mut r = Reader::new(payload);
                     let p = cfg::ResourcePackResponse::read(&mut r)?;
                     finish(&r)?;
-                    if Some(p.id) != self.resource {
-                        return Err(Error::new("protocol340 resource response mismatch"));
-                    }
-                    let status = match p.action {
-                        0..=3 => Some(p.action),
-                        4 => None,
-                        5 | 6 => Some(2),
-                        7 => Some(1),
-                        _ => return Err(Error::new("invalid protocol340 resource status")),
-                    };
-                    if let Some(status) = status {
-                        let mut w = Writer::new();
-                        w.varint(status);
-                        out.packet = Some(wire(0x18, &w.data));
-                    }
+                    out.packet = self
+                        .resource_pack
+                        .status(p.id, p.action, false)?
+                        .map(|body| wire(0x18, &body));
                     return Ok(out);
                 }
                 let p = play::Serverbound::decode(id, payload)?;

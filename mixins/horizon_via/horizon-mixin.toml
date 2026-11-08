@@ -1,9 +1,9 @@
 [mod]
 id = "horizon_via"
-version = "0.4.1"
+version = "0.5.0"
 
 [compatibility]
-horizon_revision = "d8edfbcd0f70aac5b41bab12b8bbf9cc3626de1f"
+horizon_revision = "802a858cc1ff8a26a5d17424c51ad0f478c79099"
 
 # The dependency runs before all affected game libraries, including compiled-in translations.
 [[crate]]
