@@ -1,0 +1,12 @@
+[mod]
+id = "horizon_via"
+version = "0.4.1"
+
+[compatibility]
+horizon_revision = "d8edfbcd0f70aac5b41bab12b8bbf9cc3626de1f"
+
+# The dependency runs before all affected game libraries, including compiled-in translations.
+[[crate]]
+id = "source_patch"
+path = "source_patch"
+dependent = "horizon-core"

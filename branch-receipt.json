@@ -1,0 +1,86 @@
+[
+  {
+    "repository": "horizon",
+    "local": "refs/heads/codex/older-server-mapping-generation",
+    "github": "refs/heads/archive/viahorizon-20261108/codex/older-server-mapping-generation",
+    "commit": "703c0ea18bd3ab8c55a8217841c2019b3e21f956"
+  },
+  {
+    "repository": "horizon",
+    "local": "refs/heads/codex/parity-12181",
+    "github": "refs/heads/archive/viahorizon-20261108/codex/parity-12181",
+    "commit": "911bab7e0f54b82ecc841919ed20d3da6cb55a97"
+  },
+  {
+    "repository": "horizon",
+    "local": "refs/heads/codex/upstream-compatibility",
+    "github": "refs/heads/archive/viahorizon-20261108/codex/upstream-compatibility",
+    "commit": "2b457de052d94a9215630c80136ef154604fe396"
+  },
+  {
+    "repository": "horizon",
+    "local": "refs/heads/codex/viahorizon-upstream",
+    "github": "refs/heads/archive/viahorizon-20261108/codex/viahorizon-upstream",
+    "commit": "b5406e647a3c3f3ce815543b4f4dcd6f0937c2ad"
+  },
+  {
+    "repository": "horizon",
+    "local": "refs/heads/feature/older-servers-1.21.8",
+    "github": "refs/heads/archive/viahorizon-20261108/feature/older-servers-1.21.8",
+    "commit": "b360d33ef4d0992d7b052630bcd8702157811406"
+  },
+  {
+    "repository": "horizon",
+    "local": "refs/heads/main",
+    "github": "refs/heads/archive/viahorizon-20261108/main",
+    "commit": "86410801774958f2377d57e8b5ba40c628b16428"
+  },
+  {
+    "repository": "horizon",
+    "local": "refs/heads/updater/repair-7f19c70db",
+    "github": "refs/heads/archive/viahorizon-20261108/updater/repair-7f19c70db",
+    "commit": "19509b5b646b1c3f530b5796e45f3d34a6cf3d3d"
+  },
+  {
+    "repository": "horizon",
+    "local": "refs/heads/updater/repair-realms-380a",
+    "github": "refs/heads/archive/viahorizon-20261108/updater/repair-realms-380a",
+    "commit": "a129293569dce176acdac783a90c606ad3a1ac54"
+  },
+  {
+    "repository": "horizon",
+    "local": "refs/heads/updater/terra-repo",
+    "github": "refs/heads/archive/viahorizon-20261108/updater/terra-repo",
+    "commit": "f72f7b2740d2c350a35596763425505ad9192aa9"
+  },
+  {
+    "repository": "horizon-via-mod",
+    "local": "refs/heads/codex/viahorizon-0.3",
+    "github": "refs/heads/archive/viahorizon-20261108/codex/viahorizon-0.3",
+    "commit": "a9f06ac53662bbfdb67e734aef7f08fee3724d25"
+  },
+  {
+    "repository": "horizon-via-mod",
+    "local": "refs/heads/codex/viahorizon-0.5.0",
+    "github": "refs/heads/archive/viahorizon-20261108/codex/viahorizon-0.5.0",
+    "commit": "4480113d18694b9ef432e1c0e42490cee437ed8f"
+  },
+  {
+    "repository": "horizon-via-mod",
+    "local": "refs/heads/codex/viahorizon-bedrock",
+    "github": "refs/heads/archive/viahorizon-20261108/codex/viahorizon-bedrock",
+    "commit": "9ea044a36a7dfd736804e5b5ee822040edf19d8f"
+  },
+  {
+    "repository": "horizon-via-mod",
+    "local": "refs/heads/fix/v041-shipped-defects",
+    "github": "refs/heads/archive/viahorizon-20261108/fix/v041-shipped-defects",
+    "commit": "0d4f0d789b92d5b04260aaa348231362e6f1570c"
+  },
+  {
+    "repository": "horizon-via-mod",
+    "local": "refs/heads/main",
+    "github": "refs/heads/archive/viahorizon-20261108/main",
+    "commit": "4f037b958f14c8620839de3e37f5a5acf54670de"
+  }
+]

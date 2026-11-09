@@ -1,0 +1,39 @@
+[
+  {
+    "input": {},
+    "name": "empty",
+    "kind": "slot",
+    "hex": "ffff"
+  },
+  {
+    "input": {
+      "item_id": 35,
+      "count": 3,
+      "damage": 14
+    },
+    "name": "red_wool",
+    "kind": "slot",
+    "hex": "002303000e00"
+  },
+  {
+    "input": {
+      "item_id": 276,
+      "count": 1,
+      "damage": 37
+    },
+    "name": "damaged_named_diamond_sword",
+    "kind": "slot",
+    "hex": "01140100250a000001000b556e627265616b61626c65010a0007646973706c61790800044e616d65000c4c65676163792073776f72640000"
+  },
+  {
+    "direction": "clientbound",
+    "id": 28,
+    "hex": "7b00022300114400003039653fa0000086086c65676163793138a7002303000e00c80000000300000040fffffff7e93f80000040000000404000007f",
+    "name": "metadata_all_eight_types",
+    "input": {
+      "entity_id": 123,
+      "types": 8,
+      "terminator": 127
+    }
+  }
+]
