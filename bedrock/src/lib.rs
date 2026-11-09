@@ -18,3 +18,6 @@ pub mod startup;
 
 #[cfg(feature = "nethernet")]
 pub mod session;
+
+#[cfg(feature = "nethernet")]
+pub mod host_connect;

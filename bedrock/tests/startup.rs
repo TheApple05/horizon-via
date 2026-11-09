@@ -1095,6 +1095,7 @@ async fn native_session_case(full_events: bool) {
         let deadline = Instant::now() + Duration::from_secs(15);
         let mut session = Session::connect(Request {
             http: OfflineHttp {
+                server_key: None,
                 signaling: HttpSignaling::new("horizon-session-loopback-client".into()).unwrap(),
                 endpoint: format!("http://{}", signaling.local_addr()),
                 config: ConnectionConfig {

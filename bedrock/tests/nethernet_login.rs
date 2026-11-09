@@ -374,6 +374,7 @@ async fn explicit_http_dial_reuses_proof_address_and_original_packet_queue() {
         .unwrap();
         let deadline = Instant::now() + Duration::from_secs(15);
         let request = OfflineHttp {
+            server_key: None,
             signaling: HttpSignaling::new("horizon-http-loopback-client".into()).unwrap(),
             endpoint: endpoint.clone(),
             config: ConnectionConfig {

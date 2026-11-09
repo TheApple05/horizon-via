@@ -28,6 +28,8 @@ pub struct OfflineHttp {
     pub signaling: nethernet_tokio::HttpSignaling,
     pub endpoint: String,
     pub config: nethernet_tokio::ConnectionConfig,
+    /// Optional exact server proof key, checked before any settings/Login send.
+    pub server_key: Option<p384::ecdsa::VerifyingKey>,
 }
 
 /// Dial an explicit HTTP-signaled endpoint and perform settings/offline Login
@@ -45,6 +47,7 @@ pub async fn connect_offline_http(
         signaling,
         endpoint,
         mut config,
+        server_key,
     } = request;
     if config.identity.is_some() || config.server_trust.is_none() {
         return Err(io::Error::new(
@@ -71,8 +74,24 @@ pub async fn connect_offline_http(
         None,
     )
     .await?;
+    let admitted = server_key
+        .as_ref()
+        .is_none_or(|key| client.server_public_key() == Some(key));
+    let mut transport = Transport::from_http(client);
+    if !admitted {
+        let _ = transport.close().await;
+        let _ = timeout_at(
+            Instant::now() + Duration::from_secs(2),
+            transport.finish_close(),
+        )
+        .await;
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "Bedrock server proof key differs from the configured key",
+        ));
+    }
     login_offline(
-        Transport::from_http(client),
+        transport,
         key,
         profile,
         setup_deadline,

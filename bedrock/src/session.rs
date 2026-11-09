@@ -6,7 +6,7 @@ use crate::{
     negotiation::{OfflineHttp, OfflineProfile, connect_offline_http, retire},
     startup::{self, InitializedConnection, NetworkReady, Setup},
 };
-use bedrock_client::spawn::StartupData;
+pub use bedrock_client::spawn::StartupData;
 use bedrock_client_tokio::connection::Connection;
 use bedrock_protocol::{packets, wire};
 use p384::ecdsa::SigningKey;
